@@ -1,0 +1,16 @@
+#pragma once
+
+#include "libagent/visibility.h"
+
+// Auto-generated version macros. Configured by CMake from version.h.in.
+#define LIBAGENT_VERSION       "@PROJECT_VERSION@"
+#define LIBAGENT_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define LIBAGENT_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define LIBAGENT_VERSION_PATCH @PROJECT_VERSION_PATCH@
+
+namespace libagent {
+
+/// Library version string (e.g. "0.1.0").
+LIBAGENT_API const char* version() noexcept;
+
+}  // namespace libagent

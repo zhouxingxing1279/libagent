@@ -1,0 +1,155 @@
+#include "libagent/providers/openai.hpp"
+#include "fakes/test_http_server.hpp"
+
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/use_future.hpp>
+
+#include <gtest/gtest.h>
+
+#include <string>
+
+namespace {
+
+using namespace libagent;
+namespace ts = libagent::testsupport;
+using boost::asio::awaitable;
+
+TEST(OpenAiProvider, ChatParsesMessageUsageAndRequestShape) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.status = 200;
+    resp.body = R"({"choices":[{"message":{"role":"assistant","content":"Hello!"},)"
+               R"("finish_reason":"stop"}],"usage":{"prompt_tokens":5,)"
+               R"("completion_tokens":2,"total_tokens":7}})";
+
+    std::string got_target;
+    std::string got_body;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, resp, got_target, got_body),
+                          boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "test-key";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.options.model = "gpt-test";
+            req.messages.push_back({Role::User, Content{"hi"}});
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+
+    const ChatResponse out = fut.get();
+    EXPECT_EQ(out.message.content.text, "Hello!");
+    EXPECT_EQ(out.finish, FinishReason::Stop);
+    EXPECT_EQ(out.usage.total_tokens, 7);
+
+    // The provider should have POSTed to the chat path with the requested model.
+    EXPECT_EQ(got_target, "/v1/chat/completions");
+    const Json body = Json::parse(got_body, nullptr, false);
+    ASSERT_TRUE(body.is_object());
+    EXPECT_EQ(body["model"], "gpt-test");
+    ASSERT_TRUE(body["messages"].is_array());
+    EXPECT_EQ(body["messages"][0]["role"], "user");
+}
+
+TEST(OpenAiProvider, ChatParsesToolCalls) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.status = 200;
+    resp.body = R"({"choices":[{"message":{"role":"assistant","content":null,)"
+               R"("tool_calls":[{"id":"c1","type":"function","function":)"
+               R"({"name":"get_weather","arguments":"{\"city\":\"SF\"}"}}]},)"
+               R"("finish_reason":"tool_calls"}]})";
+
+    std::string ignore_t;
+    std::string ignore_b;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, resp, ignore_t, ignore_b),
+                          boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.messages.push_back({Role::User, Content{"weather?"}});
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+
+    const ChatResponse out = fut.get();
+    EXPECT_EQ(out.finish, FinishReason::ToolCalls);
+    ASSERT_EQ(out.message.tool_calls.size(), 1u);
+    EXPECT_EQ(out.message.tool_calls[0].name, "get_weather");
+    EXPECT_EQ(out.message.tool_calls[0].arguments["city"], "SF");
+}
+
+TEST(OpenAiProvider, StreamAssemblesDeltasAndFinish) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.status = 200;
+    resp.content_type = "text/event-stream";
+    resp.stream_chunks = {
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+        "data: [DONE]\n\n",
+    };
+
+    std::string ignore_t;
+    std::string ignore_b;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, resp, ignore_t, ignore_b),
+                          boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    openai::OpenAiProvider provider(std::move(opts));
+
+    std::string assembled;
+    FinishReason finish = FinishReason::Error;
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<void> {
+            TokenSink sink = [&](const StreamEvent& ev) -> awaitable<void> {
+                if (ev.kind == StreamEvent::Kind::Delta) {
+                    assembled += ev.delta;
+                } else if (ev.kind == StreamEvent::Kind::Finish) {
+                    finish = ev.finish;
+                }
+                co_return;
+            };
+            ChatRequest req;
+            req.messages.push_back({Role::User, Content{"hi"}});
+            co_await provider.stream(req, sink);
+        },
+        boost::asio::use_future);
+    ioc.run();
+    fut.get();
+
+    EXPECT_EQ(assembled, "Hello");
+    EXPECT_EQ(finish, FinishReason::Stop);
+}
+
+}  // namespace
