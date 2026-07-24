@@ -102,6 +102,48 @@ TEST(OpenAiProvider, ChatParsesToolCalls) {
     EXPECT_EQ(out.message.tool_calls[0].arguments["city"], "SF");
 }
 
+TEST(OpenAiProvider, ToolSchemaCoercedToObjectType) {
+    // OpenAI/DeepSeek reject function schemas without type:"object". The
+    // provider must coerce a bare {} parameters schema.
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.status = 200;
+    resp.body = R"({"choices":[{"message":{"role":"assistant","content":"ok"},)"
+               R"("finish_reason":"stop"}]})";
+
+    std::string got_target;
+    std::string got_body;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, resp, got_target, got_body),
+                          boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.options.tools.push_back({"noargs", "needs no args", Json::object()});
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+    fut.get();
+
+    const Json body = Json::parse(got_body, nullptr, false);
+    ASSERT_TRUE(body.is_object());
+    ASSERT_TRUE(body["tools"].is_array());
+    ASSERT_EQ(body["tools"].size(), 1u);
+    EXPECT_EQ(body["tools"][0]["type"], "function");
+    EXPECT_EQ(body["tools"][0]["function"]["name"], "noargs");
+    EXPECT_EQ(body["tools"][0]["function"]["parameters"]["type"], "object");
+}
+
 TEST(OpenAiProvider, StreamAssemblesDeltasAndFinish) {
     boost::asio::io_context ioc;
     auto acceptor = ts::make_local_acceptor(ioc);

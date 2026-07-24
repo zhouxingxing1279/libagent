@@ -70,10 +70,17 @@ Json build_body(const Options& o, const ChatRequest& req, bool stream) {
     if (!req.options.tools.empty()) {
         Json tools = Json::array();
         for (const auto& t : req.options.tools) {
+            // OpenAI/DeepSeek require function parameters to be a JSON Schema of
+            // type "object". Coerce empty/missing-type schemas so callers can use
+            // a bare {} for no-argument tools.
+            Json params = t.parameters.is_object() ? t.parameters : Json::object();
+            if (!params.contains("type")) {
+                params["type"] = "object";
+            }
             tools.push_back(Json{{"type", "function"},
                                  {"function", Json{{"name", t.name},
                                                    {"description", t.description},
-                                                   {"parameters", t.parameters}}}});
+                                                   {"parameters", std::move(params)}}}});
         }
         j["tools"] = std::move(tools);
     }
