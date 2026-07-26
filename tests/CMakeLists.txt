@@ -8,7 +8,8 @@ set(libagent_tests
     test_provider
     test_http_client
     test_openai_provider
-    test_agent)
+    test_agent
+    test_orchestration)
 
 foreach(t IN LISTS libagent_tests)
     add_executable(${t} ${t}.cpp)
