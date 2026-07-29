@@ -22,3 +22,15 @@ foreach(t IN LISTS libagent_tests)
     libagent_target_warnings(${t})
     gtest_discover_tests(${t})
 endforeach()
+
+# The CLI-tool helper depends on Boost.Process v2 (opt-in; not a core dep).
+if(LIBAGENT_BUILD_TESTS)
+    find_package(Boost CONFIG REQUIRED COMPONENTS process)
+    add_executable(test_cli_tool test_cli_tool.cpp)
+    target_link_libraries(test_cli_tool PRIVATE
+        libagent::libagent Boost::process GTest::gtest_main)
+    target_include_directories(test_cli_tool PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
+    libagent_target_warnings(test_cli_tool)
+    gtest_discover_tests(test_cli_tool)
+endif()

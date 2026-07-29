@@ -141,6 +141,40 @@ std::string reply = asio::co_spawn(
 
 ---
 
+## 把命令行工具一行包成 Tool(`cli::command`)
+
+`libagent/tools/cli.hpp` 提供 `cli::command(...)`,把任意外部程序包成一个 Tool——
+程序直接 `exec`(不走 shell,无注入风险),`{占位符}` 从调用参数替换,自动捕获
+`stdout` / `stderr` / 退出码。返回:
+
+```json
+{ "exit": 0, "stdout": "...", "stderr": "..." }   // 启动失败时: { "error": "..." }
+```
+
+```cpp
+#include <libagent/tools/cli.hpp>
+using namespace libagent::cli;
+
+a.tools->add(command(
+    "weather",                                    // 工具名(也是函数名)
+    "Get the weather for a city",                 // 描述
+    {{"city", "string"}},                         // 参数 {名 -> JSON 类型}
+    "/usr/bin/curl",                              // 可执行程序
+    {"-s", "https://wttr.in/{city}?format=3"}));  // argv 模板,{city} 会被替换
+```
+
+模型调用 `weather({"city":"Tokyo"})` 时,handler 会执行 `curl -s '...Tokyo...'` 并把输出回灌。
+参数为空就传 `{}`;多参数照常 `{{"a","number"},{"b","string"}}`。
+
+> **链接要求:** 该 header 依赖 Boost.Process v2(Boost ≥ 1.86),核心 libagent 不含此依赖。
+> 用到它的工程需额外链接:
+> ```cmake
+> find_package(Boost CONFIG REQUIRED COMPONENTS headers process)
+> target_link_libraries(my_app PRIVATE libagent::libagent Boost::process)
+> ```
+
+---
+
 ## 5. 生成参数(model / temperature / max_tokens)
 
 通过 `AgentOptions::generate`(`GenerateOptions`):
