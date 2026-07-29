@@ -92,6 +92,10 @@ Live, runnable examples are in [`examples/`](examples/):
 - `02_tool_agent` — full ReAct loop with tools (`get_current_time`, `calculate`).
 - `03_handoff` — multi-agent router coordinating specialist sub-agents.
 
+For task-oriented recipes — adding tools, changing the system prompt, memory,
+RAG, multi-agent, switching/authoring providers — see the
+**[usage guide](docs/usage-guide.md)**.
+
 ## Requirements
 
 - C++20 compiler: GCC ≥ 11, Clang ≥ 14, Apple Clang ≥ 15, or MSVC ≥ 19.30
