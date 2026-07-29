@@ -38,6 +38,7 @@ public:
         finish.kind = StreamEvent::Kind::Finish;
         finish.finish = r.finish;
         finish.usage = r.usage;
+        finish.tool_calls = r.message.tool_calls;
         co_await sink(finish);
     }
 

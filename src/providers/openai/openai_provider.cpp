@@ -190,6 +190,8 @@ boost::asio::awaitable<void> OpenAiProvider::stream(const ChatRequest& req,
     std::string buffer;
     FinishReason last_finish = FinishReason::Stop;
     std::optional<Usage> last_usage;
+    std::vector<ToolCall> tool_calls;
+    std::vector<std::string> tool_call_args;
 
     http::Response resp = co_await client.request_stream(
         hr, [&](std::string_view chunk) -> boost::asio::awaitable<void> {
@@ -235,6 +237,32 @@ boost::asio::awaitable<void> OpenAiProvider::stream(const ChatRequest& req,
                                 co_await sink(de);
                             }
                         }
+                        // Accumulate streamed tool calls by index (OpenAI sends
+                        // id/name on the first chunk, arguments across many).
+                        if (d.contains("tool_calls")) {
+                            for (const auto& dtc : d["tool_calls"]) {
+                                const int idx = dtc.value("index", 0);
+                                if (idx < 0) {
+                                    continue;
+                                }
+                                if (static_cast<std::size_t>(idx) >= tool_calls.size()) {
+                                    tool_calls.resize(idx + 1);
+                                    tool_call_args.resize(idx + 1);
+                                }
+                                if (dtc.contains("id")) {
+                                    tool_calls[idx].id = dtc["id"].get<std::string>();
+                                }
+                                if (dtc.contains("function")) {
+                                    const auto& fn = dtc["function"];
+                                    if (fn.contains("name")) {
+                                        tool_calls[idx].name += fn["name"].get<std::string>();
+                                    }
+                                    if (fn.contains("arguments")) {
+                                        tool_call_args[idx] += fn["arguments"].get<std::string>();
+                                    }
+                                }
+                            }
+                        }
                     }
                     if (ch.contains("finish_reason") && ch["finish_reason"].is_string()) {
                         last_finish = map_finish(ch["finish_reason"].get<std::string>());
@@ -255,12 +283,20 @@ boost::asio::awaitable<void> OpenAiProvider::stream(const ChatRequest& req,
         co_return;
     }
 
+    for (std::size_t i = 0; i < tool_calls.size(); ++i) {
+        tool_calls[i].arguments =
+            tool_call_args[i].empty()
+                ? Json::object()
+                : Json::parse(tool_call_args[i], nullptr, false);
+    }
+
     StreamEvent fin;
     fin.kind = StreamEvent::Kind::Finish;
     fin.finish = last_finish;
     if (last_usage) {
         fin.usage = *last_usage;
     }
+    fin.tool_calls = std::move(tool_calls);
     co_await sink(fin);
 }
 

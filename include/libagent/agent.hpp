@@ -59,9 +59,11 @@ private:
     /// One ReAct step: call the provider, persist the assistant message, and if
     /// it requested tools, execute them and persist their results. Returns the
     /// assistant response so the caller can decide whether to terminate.
+    boost::asio::awaitable<ChatRequest> prepare_request();
     boost::asio::awaitable<ChatResponse> step();
 
     boost::asio::awaitable<Message> execute_tool(const ToolCall& tc);
+    boost::asio::awaitable<void> execute_tool_calls(const std::vector<ToolCall>& calls);
 
     std::vector<Message> build_messages(const std::string& context) const;
     std::string latest_user_query() const;

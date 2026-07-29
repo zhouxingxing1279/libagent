@@ -22,6 +22,7 @@ struct StreamEvent {
 
     FinishReason finish = FinishReason::Stop;  // Kind::Finish
     Usage usage;                               // Kind::Finish
+    std::vector<ToolCall> tool_calls;          // Kind::Finish: parsed tool calls
 
     std::string error;                // Kind::Error
 };
