@@ -13,6 +13,7 @@ option(LIBAGENT_BUILD_TESTS        "Build unit tests"                    ON)
 option(LIBAGENT_BUILD_EXAMPLES     "Build examples"                      OFF)
 option(LIBAGENT_WITH_SSL           "Enable TLS (HTTPS) support"          ON)
 option(LIBAGENT_WARNINGS_AS_ERRORS "Treat compiler warnings as errors"   ON)
+option(LIBAGENT_BUILD_DOCS         "Build API documentation (Doxygen)"   OFF)
 
 # ---------------------------------------------------------------------------
 # Global compile settings
@@ -101,6 +102,25 @@ endif()
 
 if(LIBAGENT_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# ---------------------------------------------------------------------------
+# API documentation (Doxygen)
+# ---------------------------------------------------------------------------
+if(LIBAGENT_BUILD_DOCS)
+    find_package(Doxygen REQUIRED)
+    set(DOXYGEN_PROJECT_NAME libagent)
+    set(DOXYGEN_PROJECT_VERSION ${PROJECT_VERSION})
+    set(DOXYGEN_OUTPUT_DIRECTORY docs)
+    set(DOXYGEN_EXTRACT_ALL YES)
+    set(DOXYGEN_EXTRACT_PRIVATE NO)
+    set(DOXYGEN_GENERATE_TREEVIEW YES)
+    set(DOXYGEN_QUIET YES)
+    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+    doxygen_add_docs(libagent_docs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/README.md
+        COMMENT "Generating libagent API documentation")
 endif()
 
 # ---------------------------------------------------------------------------

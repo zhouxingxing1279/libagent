@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (gcc)
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - name: Linux (clang)
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - name: macOS (Apple clang)
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+          - name: Windows (MSVC)
+            os: windows-latest
+            cc: cl
+            cxx: cl
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libboost-all-dev libssl-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install boost openssl
+
+      - name: Install dependencies (Windows, vcpkg)
+        if: runner.os == 'Windows'
+        run: vcpkg install boost openssl --triplet x64-windows
+
+      - name: Configure (Linux/macOS)
+        if: runner.os != 'Windows'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          ROOT=/usr
+          if [ "${{ runner.os }}" = "macOS" ]; then ROOT="$(brew --prefix openssl)"; fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+                -DOpenSSL_ROOT="$ROOT"
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ^
+                -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
