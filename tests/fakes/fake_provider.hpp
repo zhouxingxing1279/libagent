@@ -11,11 +11,15 @@ namespace libagent::fakes {
 /// queue. No network — drives agent/provider tests deterministically.
 class FakeProvider : public LLMProvider {
 public:
+    /// Most recent request seen by chat() (for assertions).
+    ChatRequest last_request;
+
     void push(ChatResponse r) { responses_.push(std::move(r)); }
 
     [[nodiscard]] bool empty() const { return responses_.empty(); }
 
-    boost::asio::awaitable<ChatResponse> chat(const ChatRequest& /*req*/) override {
+    boost::asio::awaitable<ChatResponse> chat(const ChatRequest& req) override {
+        last_request = req;
         co_return pop_or_default();
     }
 

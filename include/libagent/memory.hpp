@@ -2,6 +2,8 @@
 
 #include "libagent/types.hpp"
 
+#include <boost/asio/awaitable.hpp>
+
 #include <cstddef>
 #include <vector>
 
@@ -15,6 +17,11 @@ public:
     virtual void add(Message m) = 0;
     [[nodiscard]] virtual std::vector<Message> history() const = 0;
     virtual void clear() = 0;
+
+    /// Optional async maintenance (e.g. summarization). Default is a no-op;
+    /// called by the Agent before each step so only memories that need it do
+    /// any work.
+    virtual boost::asio::awaitable<void> compact() { co_return; }
 };
 
 /// Full transcript, no truncation.

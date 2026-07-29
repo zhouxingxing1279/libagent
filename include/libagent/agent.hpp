@@ -2,6 +2,7 @@
 
 #include "libagent/memory.hpp"
 #include "libagent/provider.hpp"
+#include "libagent/retriever.hpp"
 #include "libagent/streaming.hpp"
 #include "libagent/tool.hpp"
 #include "libagent/types.hpp"
@@ -23,6 +24,11 @@ struct AgentOptions {
     /// Injected as a leading System message on every request (not stored in
     /// memory). Leave unset if you manage the system prompt via memory yourself.
     std::optional<std::string> system_prompt;
+
+    /// Optional RAG retriever. When set, the agent retrieves `rag_top_k`
+    /// chunks for the latest user query each step and injects them as context.
+    std::shared_ptr<Retriever> retriever;
+    int rag_top_k = 3;
 
     GenerateOptions generate;
     int max_tool_rounds = 10;  ///< ReAct safety bound.
@@ -57,7 +63,8 @@ private:
 
     boost::asio::awaitable<Message> execute_tool(const ToolCall& tc);
 
-    std::vector<Message> build_messages() const;
+    std::vector<Message> build_messages(const std::string& context) const;
+    std::string latest_user_query() const;
 
     AgentOptions opts_;
 };
