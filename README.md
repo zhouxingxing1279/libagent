@@ -94,7 +94,8 @@ Live, runnable examples are in [`examples/`](examples/):
 
 For task-oriented recipes — adding tools, changing the system prompt, memory,
 RAG, multi-agent, switching/authoring providers — see the
-**[usage guide](docs/usage-guide.md)**.
+**[usage guide](docs/usage-guide.md)**. Planned improvements and future
+directions are in the **[roadmap](docs/roadmap.md)**.
 
 ## Requirements
 
