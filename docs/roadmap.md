@@ -85,8 +85,10 @@
   OpenAI provider 发 `image_url` 块;Anthropic provider 发 `image` 块(base64 优先,否则 url source)。
   `types.cpp` 规范序列化覆盖。新增 OpenAI + Anthropic 各 1 个多模态测试。
 
-### ☐ 12. 记忆持久化 — `M`
-- **范围**:`Memory` 加 save/load(磁盘/DB),支持跨会话;可序列化 `Message`(已有 JSON 序列化基础)。
+### ☑ 12. 记忆持久化 — `M`
+- **完成**:`include/libagent/memory_io.hpp`(header-only):`serialize(Memory)`/`load(Memory, Json)`
+  + `save_to_file`/`load_from_file`。复用 Message 的 JSON 序列化,适用于任何 Memory 实现(Full/Window/Summarizing)。
+  不改动 Memory 接口。新增 JSON 往返 + 文件往返 2 个测试。
 
 ### ☐ 13. AgentBus(多 agent 异步消息)— `M`
 - **现状**:Phase 4 暂缓;`HandoffRouter` 只做同步委派。

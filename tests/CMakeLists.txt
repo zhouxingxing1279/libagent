@@ -14,7 +14,8 @@ set(libagent_tests
     test_summarizing_memory
     test_rag
     test_vector_retriever
-    test_openai_embeddings)
+    test_openai_embeddings
+    test_memory_io)
 
 foreach(t IN LISTS libagent_tests)
     add_executable(${t} ${t}.cpp)

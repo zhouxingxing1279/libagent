@@ -360,6 +360,14 @@ a.memory = mem;
 
 摘要由 Agent 每步自动触发(`Memory::compact()` 钩子,阈值以下为 no-op)。
 
+**持久化**:`include/libagent/memory_io.hpp` 把记忆存取到 JSON/文件(适用于任何 Memory 实现):
+
+```cpp
+save_to_file(*mem, "/path/chat.json");    // 保存历史
+load_from_file(*mem, "/path/chat.json");  // 加载(替换当前内容)
+// 或:Json j = serialize(*mem); load(*mem2, j);
+```
+
 ---
 
 ## 8. RAG 检索增强
