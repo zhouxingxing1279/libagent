@@ -6,10 +6,12 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -22,6 +24,9 @@ struct CannedResponse {
     // If non-empty, the body is sent as one write per entry (for SSE/streaming
     // tests). Content-Length is the sum of all entries; `body` is ignored.
     std::vector<std::string> stream_chunks;
+    // If true, accept + read the request, then never respond (keep the socket
+    // open). Used to exercise client read timeouts.
+    bool stall = false;
 };
 
 // Acceptor bound to an ephemeral port on the loopback interface.
@@ -47,6 +52,13 @@ inline boost::asio::awaitable<void> serve_one(
     co_await http::async_read(sock, buf, req, net::use_awaitable);
     received_target = std::string(req.target());
     received_body = req.body();
+
+    if (resp.stall) {
+        // Never respond; hold the socket open so the client's read blocks.
+        boost::asio::steady_timer t(sock.get_executor(), std::chrono::hours(24));
+        co_await t.async_wait(net::use_awaitable);
+        co_return;
+    }
 
     if (resp.stream_chunks.empty()) {
         http::response<http::string_body> res{http::int_to_status(resp.status),

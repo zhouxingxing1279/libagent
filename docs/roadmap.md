@@ -11,15 +11,11 @@
 
 ## P0 — 生产加固(上生产前应做)
 
-### ☐ 1. 网络超时 — `M`
-- **现状**:`src/http/https_client.cpp` 无 connect/read/write 超时,慢/死主机会让 agent 永久挂起。
-- **目标**:全链路超时,可配置。
-- **范围**:
-  - `Request` 已有 `timeout` 字段但未接线 —— 接到各 IO 阶段。
-  - 改用 `beast::tcp_stream` + `expires_after()`,或 `steady_timer` + `async_cancel`。
-  - SSE 流式单独设"首字节超时"与"总超时"。
-  - provider 透传超时配置。
-- **涉及**:`src/http/https_client.{hpp,cpp}`、`src/providers/openai/openai_provider.cpp`
+### ☑ 1. 网络超时 — `M`
+- **完成**:重写 `https_client` 基于 `beast::tcp_stream` + `expires_after`。
+  一次性请求对各阶段(connect/handshake/write/read)设超时;流式为每 chunk 重置的"无进展超时"。
+  超时中止当前操作并以 `libagent: request timed out after Xms` 抛出。`Request.timeout` 恢复(默认 30s)。
+  新增 stalled-server 超时测试。
 
 ### ☐ 2. 重试 + 指数退避 — `M`
 - **现状**:无任何重试;429/5xx/瞬时网络错误直接失败。

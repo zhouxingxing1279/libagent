@@ -21,6 +21,9 @@ struct Request {
     std::vector<std::pair<std::string, std::string>> headers;
     std::string body;
     bool use_tls = true;
+    /// Per-phase timeout (connect/handshake/write/read). For streaming reads it
+    /// is a no-progress timeout: reset after each received chunk.
+    std::chrono::steady_clock::duration timeout = std::chrono::seconds(30);
 };
 
 struct Response {

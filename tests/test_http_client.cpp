@@ -10,6 +10,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <future>
 #include <string>
 #include <string_view>
 
@@ -97,6 +99,46 @@ TEST(HttpsClient, StreamDeliversFullBodyViaChunks) {
     EXPECT_EQ(got_status, 200u);
     EXPECT_EQ(assembled,
               "data: {\"a\":1}\n\ndata: {\"b\":2}\n\ndata: [DONE]\n\n");
+}
+
+TEST(HttpsClient, ReadTimeoutAbortsStalledServer) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.stall = true;  // accept + read, then never respond
+
+    std::string ignore_target;
+    std::string ignore_body;
+    boost::asio::co_spawn(ioc,
+                          ts::serve_one(acceptor, resp, ignore_target, ignore_body),
+                          boost::asio::detached);
+
+    http::HttpsClient client;
+    http::Request req;
+    req.use_tls = false;
+    req.host = "127.0.0.1";
+    req.service = std::to_string(port);
+    req.target = "/slow";
+    req.method = boost::beast::http::verb::get;
+    req.timeout = std::chrono::milliseconds(150);
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<http::Response> { co_return co_await client.request(req); },
+        boost::asio::use_future);
+
+    // The stalled server holds a pending op, so plain run() would block. Drive
+    // one handler at a time until the client future is ready, then stop.
+    while (ioc.run_one()) {
+        if (fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            break;
+        }
+    }
+    ioc.stop();
+
+    EXPECT_THROW({ (void)fut.get(); }, std::runtime_error);
 }
 
 }  // namespace
