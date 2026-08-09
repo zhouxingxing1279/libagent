@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <string>
 
 namespace {
@@ -192,6 +193,110 @@ TEST(OpenAiProvider, StreamAssemblesDeltasAndFinish) {
 
     EXPECT_EQ(assembled, "Hello");
     EXPECT_EQ(finish, FinishReason::Stop);
+}
+
+TEST(OpenAiProvider, RetriesOn429ThenSucceeds) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse r429;
+    r429.status = 429;
+    r429.body = R"({"error":"rate limit"})";
+    ts::CannedResponse r200;
+    r200.status = 200;
+    r200.body = R"({"choices":[{"message":{"role":"assistant","content":"ok"},)"
+               R"("finish_reason":"stop"}]})";
+
+    std::string a, b, c, d;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, r429, a, b), boost::asio::detached);
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, r200, c, d), boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    opts.max_retries = 2;
+    opts.initial_backoff = std::chrono::milliseconds(5);
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.messages.push_back({Role::User, Content{"hi"}});
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+
+    const ChatResponse out = fut.get();
+    EXPECT_EQ(out.message.content.text, "ok");
+}
+
+TEST(OpenAiProvider, NonRetryableStatusThrowsImmediately) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse r400;
+    r400.status = 400;  // client error — not retried
+    r400.body = R"({"error":"bad request"})";
+
+    std::string a, b;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, r400, a, b), boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    opts.max_retries = 3;
+    opts.initial_backoff = std::chrono::milliseconds(5);
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.messages.push_back({Role::User, Content{"hi"}});
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+
+    EXPECT_THROW({ (void)fut.get(); }, std::runtime_error);
+}
+
+TEST(OpenAiProvider, ExhaustsRetriesThenThrows) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse r503a;
+    r503a.status = 503;
+    r503a.body = R"({"error":"unavailable"})";
+    ts::CannedResponse r503b = r503a;
+
+    std::string a, b, c, d;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, r503a, a, b), boost::asio::detached);
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, r503b, c, d), boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    opts.max_retries = 1;  // 1 retry => 2 attempts total
+    opts.initial_backoff = std::chrono::milliseconds(5);
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.messages.push_back({Role::User, Content{"hi"}});
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+
+    EXPECT_THROW({ (void)fut.get(); }, std::runtime_error);
 }
 
 }  // namespace

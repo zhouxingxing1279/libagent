@@ -17,11 +17,11 @@
   超时中止当前操作并以 `libagent: request timed out after Xms` 抛出。`Request.timeout` 恢复(默认 30s)。
   新增 stalled-server 超时测试。
 
-### ☐ 2. 重试 + 指数退避 — `M`
-- **现状**:无任何重试;429/5xx/瞬时网络错误直接失败。
-- **目标**:可配置的自动重试。
-- **范围**:provider `Options` 加 `max_retries` / `backoff`;尊重 `Retry-After`;流式与非流式分别处理;Agent 层可选"整轮重试"。
-- **涉及**:`provider.hpp`、`openai_provider.cpp`
+### ☑ 2. 重试 + 指数退避 — `M`
+- **完成**(非流式 `chat()`):`OpenAiProvider::Options` 加 `max_retries` / `initial_backoff` /
+  `backoff_multiplier` / `max_backoff`。瞬时错误(超时/连接/HTTP 408·429·5xx)按指数退避重试,
+  尊重 `Retry-After` 头。新增 3 个测试(429→重试成功、400 不重试立即抛、503 耗尽重试后抛)。
+- **待续**:`stream()` 的重试需重构 SSE 回调(不能中途安全重发),留作后续。
 
 ### ☐ 3. 取消机制 — `M`
 - **现状**:无 `cancellation_signal`,长跑的 agent 无法中途叫停。
