@@ -145,6 +145,9 @@ void to_json(Json& j, const GenerateOptions& g) {
     if (g.top_p) j["top_p"] = *g.top_p;
     if (!g.stop.empty()) j["stop"] = g.stop;
     if (!g.tools.empty()) j["tools"] = g.tools;  // canonical: vector<ToolDefinition>
+    if (g.response_format) j["response_format"] = *g.response_format;
+    if (g.tool_choice) j["tool_choice"] = *g.tool_choice;
+    if (g.seed) j["seed"] = *g.seed;
     // 'stream' defaults to false and is omitted here.
 }
 
@@ -155,6 +158,9 @@ void from_json(const Json& j, GenerateOptions& g) {
     if (j.contains("top_p")) g.top_p = j["top_p"].get<int>();
     if (j.contains("stop")) g.stop = j["stop"].get<std::vector<std::string>>();
     if (j.contains("tools")) g.tools = j["tools"].get<std::vector<ToolDefinition>>();
+    if (j.contains("response_format")) g.response_format = j["response_format"];
+    if (j.contains("tool_choice")) g.tool_choice = j["tool_choice"];
+    if (j.contains("seed")) g.seed = j["seed"].get<long>();
 }
 
 }  // namespace libagent

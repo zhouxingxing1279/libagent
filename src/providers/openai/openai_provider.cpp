@@ -102,6 +102,10 @@ Json build_body(const Options& o, const ChatRequest& req, bool stream) {
         j["tools"] = std::move(tools);
     }
 
+    if (req.options.response_format) j["response_format"] = *req.options.response_format;
+    if (req.options.tool_choice) j["tool_choice"] = *req.options.tool_choice;
+    if (req.options.seed) j["seed"] = *req.options.seed;
+
     if (stream) {
         j["stream"] = true;
     }

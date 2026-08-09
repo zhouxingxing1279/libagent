@@ -337,4 +337,42 @@ TEST(OpenAiProvider, ExhaustsRetriesThenThrows) {
     EXPECT_THROW({ (void)fut.get(); }, std::runtime_error);
 }
 
+TEST(OpenAiProvider, StructuredOutputFieldsAreSerialized) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.status = 200;
+    resp.body = R"({"choices":[{"message":{"role":"assistant","content":"{}"},)"
+               R"("finish_reason":"stop"}]})";
+
+    std::string got_t, got_b;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, resp, got_t, got_b), boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    opts.max_retries = 0;
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.options.response_format = Json{{"type", "json_object"}};
+            req.options.tool_choice = "required";
+            req.options.seed = 42L;
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+    fut.get();
+
+    const Json body = Json::parse(got_b, nullptr, false);
+    EXPECT_EQ(body["response_format"]["type"], "json_object");
+    EXPECT_EQ(body["tool_choice"], "required");
+    EXPECT_EQ(body["seed"], 42);
+}
+
 }  // namespace

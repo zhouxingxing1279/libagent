@@ -61,6 +61,13 @@ struct GenerateOptions {
     std::vector<std::string> stop;
     bool stream = false;
     std::vector<ToolDefinition> tools;
+    /// OpenAI-style structured output: e.g. {"type":"json_object"} or a full
+    /// json_schema. Serialized as-is by supporting providers.
+    std::optional<Json> response_format;
+    /// Tool selection: "auto" / "none" / "required", or {"type":"function",...}.
+    std::optional<Json> tool_choice;
+    /// Sampling seed (best-effort determinism), where supported.
+    std::optional<long> seed;
 };
 
 // ---- Role string helpers --------------------------------------------------

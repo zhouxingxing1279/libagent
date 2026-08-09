@@ -75,8 +75,10 @@
   分块 + `include/libagent/providers/openai_embeddings.hpp`(`openai::Embedder`,OpenAI 兼容 embeddings 端点)。
   3 个离线测试(VectorRetriever 排序、分块、embedder 解析)。
 
-### ☐ 10. 结构化输出 — `S`
-- **范围**:`GenerateOptions` 加 `response_format`(JSON mode)、`tool_choice`(auto/none/required/specific)、`seed`;provider 序列化。
+### ☑ 10. 结构化输出 — `S`
+- **完成**:`GenerateOptions` 加 `response_format`(JSON mode/json_schema,`optional<Json>` 直传)、
+  `tool_choice`(`"auto"`/`"none"`/`"required"` 或具体函数对象)、`seed`。OpenAI provider 序列化这三项;
+  `types.cpp` 的规范序列化也覆盖。新增序列化测试。Anthropic 的 tool_choice 格式不同,留作后续。
 
 ### ☐ 11. 多模态 Content — `M`
 - **现状**:`Content` 仅文本。

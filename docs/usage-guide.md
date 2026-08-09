@@ -190,6 +190,14 @@ a.generate.stop        = {"\n\n"};          // 可选 stop 序列
 
 `model` 留空时用 provider 的 `default_model`。
 
+**结构化输出**(`response_format` / `tool_choice` / `seed`,按 OpenAI 风格序列化):
+
+```cpp
+a.generate.response_format = Json{{"type", "json_object"}};  // JSON mode
+a.generate.tool_choice     = "required";   // 强制调工具(或 "auto"/"none")
+a.generate.seed            = 42L;          // 尽力可复现
+```
+
 ---
 
 ## 6. 运行:阻塞 / 协程 / 流式
