@@ -1,12 +1,19 @@
 #include "libagent/tools/cli.hpp"
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <string>
 
 namespace {
@@ -57,6 +64,33 @@ TEST(CliTool, SchemaDescribesObjectParams) {
     EXPECT_EQ(t.spec.parameters["properties"]["y"]["type"], "string");
     ASSERT_TRUE(t.spec.parameters["required"].is_array());
     EXPECT_EQ(t.spec.parameters["required"].size(), 2u);
+}
+
+TEST(CliTool, CancellationPropagatesAndKillsChild) {
+    // A long-running child; cancelling the handler must re-throw
+    // operation_aborted (propagating to the agent) AND terminate the child so
+    // io_context.run() doesn't hang on the 30s sleep.
+    auto t = cli::command("sleeper", "sleeps", {}, "/bin/sh", {"-c", "sleep 30"});
+
+    boost::asio::io_context ioc;
+    boost::asio::cancellation_signal sig;
+    auto fut = boost::asio::co_spawn(
+        ioc, t.handler(Json::object()),
+        boost::asio::bind_cancellation_slot(sig.slot(), boost::asio::use_future));
+
+    boost::asio::co_spawn(
+        ioc,
+        [&]() -> boost::asio::awaitable<void> {
+            boost::asio::steady_timer tm(co_await boost::asio::this_coro::executor,
+                                         std::chrono::milliseconds(30));
+            co_await tm.async_wait(boost::asio::use_awaitable);
+            sig.emit(boost::asio::cancellation_type::all);
+            co_return;
+        },
+        boost::asio::detached);
+    ioc.run();
+
+    EXPECT_THROW({ (void)fut.get(); }, std::exception);
 }
 
 }  // namespace

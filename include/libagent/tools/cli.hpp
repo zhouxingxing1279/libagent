@@ -14,6 +14,7 @@
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/buffer.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/channel.hpp>
@@ -121,16 +122,36 @@ inline Tool command(std::string name, std::string description, ParamSpec params,
         }
 
         auto ex = co_await boost::asio::this_coro::executor;
+        auto cs = co_await boost::asio::this_coro::cancellation_state;
         std::string out_str;
         std::string err_str;
         int exit_code = 0;
 
+        // Pipes + process are owned via shared_ptr so the detached reader
+        // coroutines (and the terminate-on-cancel guard) keep them alive even
+        // if this handler unwinds due to cancellation.
+        auto out_pipe = std::make_shared<boost::asio::readable_pipe>(ex);
+        auto err_pipe = std::make_shared<boost::asio::readable_pipe>(ex);
+
         try {
-            boost::asio::readable_pipe out_pipe(ex);
-            boost::asio::readable_pipe err_pipe(ex);
-            boost::process::v2::process proc(
+            auto proc = std::make_shared<boost::process::v2::process>(
                 ex, program.string(), argv,
-                boost::process::v2::process_stdio{/*in*/ {}, out_pipe, err_pipe});
+                boost::process::v2::process_stdio{/*in*/ {}, *out_pipe, *err_pipe});
+
+            // RAII: if we leave without a clean exit (cancellation / exception),
+            // kill the child so it isn't orphaned (v2 doesn't kill on destruct).
+            struct exit_guard {
+                std::shared_ptr<boost::process::v2::process> p;
+                bool exited = false;
+                ~exit_guard() noexcept {
+                    if (p && !exited) {
+                        try {
+                            p->terminate();
+                        } catch (...) {
+                        }
+                    }
+                }
+            } guard{proc};
 
             // Drain both pipes concurrently so a full stderr buffer can't
             // deadlock the child.
@@ -140,16 +161,11 @@ inline Tool command(std::string name, std::string description, ParamSpec params,
             auto results = std::make_shared<std::array<std::string, 2>>();
 
             for (std::size_t which = 0; which < 2; ++which) {
+                auto pipe = (which == 0) ? out_pipe : err_pipe;
                 boost::asio::co_spawn(
                     ex,
-                    [&out_pipe, &err_pipe, which, chan, results]() -> boost::asio::awaitable<void> {
-                        boost::asio::awaitable<std::string> reader;
-                        if (which == 0) {
-                            reader = drain(out_pipe);
-                        } else {
-                            reader = drain(err_pipe);
-                        }
-                        (*results)[which] = co_await std::move(reader);
+                    [pipe, which, chan, results]() -> boost::asio::awaitable<void> {
+                        (*results)[which] = co_await drain(*pipe);
                         co_await chan->async_send(boost::system::error_code{}, which,
                                                   boost::asio::use_awaitable);
                     },
@@ -160,8 +176,17 @@ inline Tool command(std::string name, std::string description, ParamSpec params,
 
             out_str = std::move((*results)[0]);
             err_str = std::move((*results)[1]);
-            exit_code = co_await proc.async_wait(boost::asio::use_awaitable);
+            exit_code = co_await proc->async_wait(boost::asio::use_awaitable);
+            guard.exited = true;
+        } catch (const boost::system::system_error& e) {
+            if (cs.cancelled() != boost::asio::cancellation_type::none) {
+                throw;  // propagate cancellation up to the agent
+            }
+            co_return Json{{"error", e.what()}};
         } catch (const std::exception& e) {
+            if (cs.cancelled() != boost::asio::cancellation_type::none) {
+                throw;
+            }
             co_return Json{{"error", e.what()}};
         }
 

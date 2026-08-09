@@ -23,11 +23,12 @@
   尊重 `Retry-After` 头。新增 3 个测试(429→重试成功、400 不重试立即抛、503 耗尽重试后抛)。
 - **待续**:`stream()` 的重试需重构 SSE 回调(不能中途安全重发),留作后续。
 
-### ☐ 3. 取消机制 — `M`
-- **现状**:无 `cancellation_signal`,长跑的 agent 无法中途叫停。
-- **目标**:可取消运行中的 agent。
-- **范围**:`Agent::co_run`/`run` 接受 `asio::cancellation_signal`;协程响应 cancel;`cli::command` 的子进程可被 kill。
-- **涉及**:`agent.{hpp,cpp}`、`provider.hpp`、`tools/cli.hpp`
+### ☑ 3. 取消机制 — `M`
+- **完成**:agent 运行可中途取消——协程形式用 `bind_cancellation_slot` 派发 `co_run` 即可
+  (asio 取消自动传播到 http/定时器);新增阻塞重载 `run(input, cancellation_slot)`。
+  `cli::command` 重写为取消安全:pipe/process 改 shared_ptr(避免取消展开时悬空),
+  RAII guard 在取消/异常时 `terminate()` 杀子进程,取消经 `cancellation_state` 判定后传播。
+  新增 2 个测试(agent 取消、cli 取消传播+杀子进程)。
 
 ### ☐ 4. 统一错误类型 — `M`
 - **现状**:异常 + ad-hoc `{"error":...}` 混用,调用方难程序化处理。

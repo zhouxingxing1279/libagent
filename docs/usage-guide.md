@@ -226,6 +226,33 @@ ioc.run();
 
 ---
 
+## 取消运行
+
+agent 运行可被中途取消。协程形式:用 `bind_cancellation_slot` 派发 `co_run`,另一处
+(或另一线程)emit 取消信号即可中断当前 LLM/工具调用:
+
+```cpp
+asio::cancellation_signal sig;
+auto fut = asio::co_spawn(
+    ioc, agent.co_run("long task"),
+    asio::bind_cancellation_slot(sig.slot(), asio::use_future));
+// ...稍后:
+sig.emit(asio::cancellation_type::all);   // 中断;fut.get() 会抛 system_error
+```
+
+阻塞形式提供了接受取消槽的重载:
+
+```cpp
+asio::cancellation_signal sig;
+// 另一线程可调 sig.emit(...) 中断:
+std::string reply = agent.run("long task", sig.slot());
+```
+
+取消会传播到协程链里的所有 asio 操作(http、定时器等)。`cli::command` 启动的子进程在
+取消时会被终止(不会成为孤儿进程)。
+
+---
+
 ## 7. 记忆:Full / Window / Summarizing
 
 - `FullMemory()` —— 完整对话,不截断(自己负责控制长度)。

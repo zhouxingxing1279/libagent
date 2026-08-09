@@ -1,5 +1,6 @@
 #include "libagent/agent.hpp"
 
+#include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/channel.hpp>
@@ -221,6 +222,16 @@ std::string Agent::run(std::string user_input) {
     boost::asio::io_context ioc;
     auto fut = boost::asio::co_spawn(ioc, co_run(std::move(user_input)),
                                      boost::asio::use_future);
+    ioc.run();
+    return fut.get();
+}
+
+std::string Agent::run(std::string user_input,
+                       const boost::asio::cancellation_slot& slot) {
+    boost::asio::io_context ioc;
+    auto fut = boost::asio::co_spawn(
+        ioc, co_run(std::move(user_input)),
+        boost::asio::bind_cancellation_slot(slot, boost::asio::use_future));
     ioc.run();
     return fut.get();
 }

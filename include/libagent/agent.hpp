@@ -8,6 +8,7 @@
 #include "libagent/types.hpp"
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 
 #include <memory>
 #include <optional>
@@ -54,6 +55,10 @@ public:
 
     /// Blocking convenience: runs co_run on an internal io_context.
     std::string run(std::string user_input);
+
+    /// Like run(), but bound to a cancellation slot so the caller can abort
+    /// the run (from another thread) via the slot's cancellation_signal.
+    std::string run(std::string user_input, const boost::asio::cancellation_slot& slot);
 
 private:
     /// One ReAct step: call the provider, persist the assistant message, and if

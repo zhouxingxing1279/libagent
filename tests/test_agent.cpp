@@ -3,7 +3,10 @@
 #include "libagent/memory.hpp"
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -323,6 +326,52 @@ TEST(Agent, StreamHandlesToolRoundThenFinal) {
         }
     }
     EXPECT_TRUE(ran_tool);
+}
+
+// A provider whose chat() blocks on a long, cancellable await — stands in for
+// a slow/in-flight network call so we can exercise cancellation.
+class HangingProvider : public LLMProvider {
+public:
+    boost::asio::awaitable<ChatResponse> chat(const ChatRequest&) override {
+        boost::asio::steady_timer t(co_await boost::asio::this_coro::executor,
+                                    std::chrono::seconds(30));
+        co_await t.async_wait(boost::asio::use_awaitable);
+        ChatResponse r;
+        r.message.content.text = "should not reach";
+        co_return r;
+    }
+    boost::asio::awaitable<void> stream(const ChatRequest&, TokenSink) override {
+        co_return;
+    }
+};
+
+TEST(Agent, RunIsCancellableViaCancellationSlot) {
+    auto provider = std::make_shared<HangingProvider>();
+    AgentOptions opts;
+    opts.provider = provider;
+    opts.memory = std::make_shared<FullMemory>();
+    Agent agent(opts);
+
+    boost::asio::io_context ioc;
+    boost::asio::cancellation_signal sig;
+    auto fut = boost::asio::co_spawn(
+        ioc, agent.co_run("hi"),
+        boost::asio::bind_cancellation_slot(sig.slot(), boost::asio::use_future));
+
+    // Emit the cancellation from a timer on the same io_context shortly after.
+    boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<void> {
+            boost::asio::steady_timer t(co_await boost::asio::this_coro::executor,
+                                        std::chrono::milliseconds(20));
+            co_await t.async_wait(boost::asio::use_awaitable);
+            sig.emit(boost::asio::cancellation_type::all);
+            co_return;
+        },
+        boost::asio::detached);
+    ioc.run();
+
+    EXPECT_THROW({ (void)fut.get(); }, boost::system::system_error);
 }
 
 }  // namespace
