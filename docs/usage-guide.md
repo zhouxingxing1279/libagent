@@ -395,6 +395,18 @@ opts.default_model  = "deepseek-chat";
 
 Ollama 本地: `opts.base_url = "http://localhost:11434/v1"`(注意是 http,key 填任意值)。
 
+### Anthropic Claude
+
+库内置了 Anthropic Claude provider(`include/libagent/providers/anthropic.hpp`),自动处理
+Claude 的格式差异(system 顶层字段、content 块数组、`tool_use`/`tool_result`、`input_schema`、
+连续工具结果合并、`stop_reason`、SSE 流式):
+
+```cpp
+#include <libagent/providers/anthropic.hpp>
+auto provider = std::make_shared<libagent::anthropic::AnthropicProvider>(
+    libagent::anthropic::Options{/*.api_key="sk-ant-..."*/});
+```
+
 ### 写自己的 Provider
 
 实现 `LLMProvider` 的两个方法即可,其余框架照常工作:

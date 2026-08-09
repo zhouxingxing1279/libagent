@@ -8,6 +8,7 @@ set(libagent_tests
     test_provider
     test_http_client
     test_openai_provider
+    test_anthropic_provider
     test_agent
     test_orchestration
     test_summarizing_memory

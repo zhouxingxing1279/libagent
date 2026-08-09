@@ -61,8 +61,13 @@
 
 ## P1 — 功能扩展
 
-### ☐ 8. 第二个 provider(Anthropic Claude)— `M`
-- **目标**:验证 `LLMProvider` 抽象跨厂商;Claude Messages API(消息/工具格式与 OpenAI 不同)。
+### ☑ 8. 第二个 provider(Anthropic Claude)— `M`
+- **完成**:`include/libagent/providers/anthropic.hpp` + 实现,实现 `LLMProvider`(chat + stream)。
+  处理 Claude 全部差异:system 顶层字段、content 块数组、`tool_use`/`tool_result` 块、`input_schema`、
+  连续工具结果合并为单个 user 轮、`stop_reason`/`usage` 映射、SSE 流式(`content_block_*`/`message_delta`)。
+  顺手把重试逻辑抽成共享 `http::send_with_retry`(OpenAI/Anthropic 共用)。4 个离线测试(text/tool_use/
+  system 顶层/工具结果合并)。抽象跨厂商验证通过。
+- **待人工验证**:真实 Anthropic API 需 Anthropic key(实网)。
 
 ### ☐ 9. EmbeddingProvider + 向量 RAG — `M`
 - **现状**:`SimpleCorpusRetriever` 仅关键词重叠。

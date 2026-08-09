@@ -58,7 +58,9 @@ add_library(libagent
     src/tool.cpp
     src/memory.cpp
     src/http/https_client.cpp
+    src/http/retry.cpp
     src/providers/openai/openai_provider.cpp
+    src/providers/anthropic/anthropic_provider.cpp
     src/agent.cpp
     src/orchestration.cpp
     src/summarizing_memory.cpp)
