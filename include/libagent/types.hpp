@@ -17,9 +17,20 @@ namespace libagent {
 
 enum class Role { System, User, Assistant, Tool };
 
-/// Text content today; multimodal-friendly later.
+/// A reference to an image attached to a message. `url` is used for OpenAI
+/// image_url (and may be a data: URI); `media_type`+`data` carry base64 image
+/// data (Anthropic). Providers use whichever is set.
+struct ImageRef {
+    std::string url;
+    std::optional<std::string> media_type;
+    std::optional<std::string> data;
+};
+
+/// Text content, optionally with attached images (multimodal). `images` empty
+/// => plain text (the common case).
 struct Content {
     std::string text;
+    std::vector<ImageRef> images;
 };
 
 /// A function call the model wants to make.
@@ -79,6 +90,8 @@ void to_json(Json& j, const Role& r);
 void from_json(const Json& j, Role& r);
 void to_json(Json& j, const Content& c);
 void from_json(const Json& j, Content& c);
+void to_json(Json& j, const ImageRef& i);
+void from_json(const Json& j, ImageRef& i);
 void to_json(Json& j, const ToolCall& t);
 void from_json(const Json& j, ToolCall& t);
 void to_json(Json& j, const Message& m);

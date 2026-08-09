@@ -70,7 +70,29 @@ Json build_messages(const std::vector<Message>& msgs) {
             out.push_back(Json{{"role", "assistant"}, {"content", std::move(content)}});
             ++i;
         } else {  // Role::User
-            out.push_back(Json{{"role", "user"}, {"content", m.content.text}});
+            Json msg;
+            msg["role"] = "user";
+            if (m.content.images.empty()) {
+                msg["content"] = m.content.text;
+            } else {
+                Json parts = Json::array();
+                if (!m.content.text.empty()) {
+                    parts.push_back(Json{{"type", "text"}, {"text", m.content.text}});
+                }
+                for (const auto& img : m.content.images) {
+                    Json source;
+                    if (img.data && img.media_type) {
+                        source = Json{{"type", "base64"},
+                                      {"media_type", *img.media_type},
+                                      {"data", *img.data}};
+                    } else {
+                        source = Json{{"type", "url"}, {"url", img.url}};
+                    }
+                    parts.push_back(Json{{"type", "image"}, {"source", std::move(source)}});
+                }
+                msg["content"] = std::move(parts);
+            }
+            out.push_back(std::move(msg));
             ++i;
         }
     }

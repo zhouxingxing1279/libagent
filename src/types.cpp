@@ -34,13 +34,69 @@ void from_json(const Json& j, Role& r) {
 // ---------------------------------------------------------------------------
 // Content
 // ---------------------------------------------------------------------------
-void to_json(Json& j, const Content& c) { j = c.text; }
+void to_json(Json& j, const Content& c) {
+    if (c.images.empty()) {
+        j = c.text;
+        return;
+    }
+    j = Json::array();
+    if (!c.text.empty()) {
+        j.push_back(Json{{"type", "text"}, {"text", c.text}});
+    }
+    for (const auto& img : c.images) {
+        Json imgj = Json{{"type", "image"}, {"url", img.url}};
+        if (img.media_type) {
+            imgj["media_type"] = *img.media_type;
+        }
+        if (img.data) {
+            imgj["data"] = *img.data;
+        }
+        j.push_back(std::move(imgj));
+    }
+}
 
 void from_json(const Json& j, Content& c) {
     if (j.is_string()) {
         c.text = j.get<std::string>();
     } else if (j.is_object() && j.contains("text") && j["text"].is_string()) {
         c.text = j["text"].get<std::string>();
+    } else if (j.is_array()) {
+        for (const auto& part : j) {
+            const std::string type = part.value("type", "");
+            if (type == "text") {
+                c.text += part.value("text", std::string{});
+            } else if (type == "image") {
+                ImageRef img;
+                img.url = part.value("url", "");
+                if (part.contains("media_type")) {
+                    img.media_type = part["media_type"].get<std::string>();
+                }
+                if (part.contains("data")) {
+                    img.data = part["data"].get<std::string>();
+                }
+                c.images.push_back(std::move(img));
+            }
+        }
+    }
+}
+
+void to_json(Json& j, const ImageRef& i) {
+    j = Json{{"type", "image"}, {"url", i.url}};
+    if (i.media_type) {
+        j["media_type"] = *i.media_type;
+    }
+    if (i.data) {
+        j["data"] = *i.data;
+    }
+}
+
+void from_json(const Json& j, ImageRef& i) {
+    i.url = j.value("url", "");
+    if (j.contains("media_type")) {
+        i.media_type = j["media_type"].get<std::string>();
+    }
+    if (j.contains("data")) {
+        i.data = j["data"].get<std::string>();
     }
 }
 

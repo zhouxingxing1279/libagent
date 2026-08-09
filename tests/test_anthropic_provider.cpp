@@ -158,4 +158,44 @@ TEST(AnthropicProvider, ConsecutiveToolResultsMergeIntoOneUserTurn) {
     EXPECT_EQ(msgs[2]["content"][1]["tool_use_id"], "t2");
 }
 
+TEST(AnthropicProvider, MultimodalUserSerializesBase64Image) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.status = 200;
+    resp.body = ok_body();
+
+    std::string got_t, got_b;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, resp, got_t, got_b), boost::asio::detached);
+
+    anthropic::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    anthropic::AnthropicProvider provider(std::move(opts));
+
+    ChatRequest req;
+    Message m;
+    m.role = Role::User;
+    m.content.text = "describe this";
+    ImageRef img;
+    img.url = "ignored";
+    img.media_type = "image/png";
+    img.data = "BASE64DATA";
+    m.content.images.push_back(img);
+    req.messages.push_back(m);
+    run_chat(provider, ioc, req);
+
+    const Json body = Json::parse(got_b, nullptr, false);
+    const Json& content = body["messages"][0]["content"];
+    ASSERT_TRUE(content.is_array());
+    ASSERT_EQ(content.size(), 2u);
+    EXPECT_EQ(content[0]["type"], "text");
+    EXPECT_EQ(content[1]["type"], "image");
+    EXPECT_EQ(content[1]["source"]["type"], "base64");
+    EXPECT_EQ(content[1]["source"]["media_type"], "image/png");
+    EXPECT_EQ(content[1]["source"]["data"], "BASE64DATA");
+}
+
 }  // namespace

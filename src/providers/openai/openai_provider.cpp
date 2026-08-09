@@ -54,7 +54,18 @@ Json build_body(const Options& o, const ChatRequest& req, bool stream) {
     for (const auto& m : req.messages) {
         Json mj = Json::object();
         mj["role"] = role_to_string(m.role);
-        if (m.role == Role::Assistant && !m.tool_calls.empty() && m.content.text.empty()) {
+        if (m.role == Role::User && !m.content.images.empty()) {
+            Json parts = Json::array();
+            if (!m.content.text.empty()) {
+                parts.push_back(Json{{"type", "text"}, {"text", m.content.text}});
+            }
+            for (const auto& img : m.content.images) {
+                parts.push_back(Json{{"type", "image_url"},
+                                     {"image_url", Json{{"url", img.url}}}});
+            }
+            mj["content"] = std::move(parts);
+        } else if (m.role == Role::Assistant && !m.tool_calls.empty() &&
+                   m.content.text.empty()) {
             mj["content"] = nullptr;
         } else {
             mj["content"] = m.content.text;

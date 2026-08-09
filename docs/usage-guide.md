@@ -176,6 +176,24 @@ a.tools->add(command(
 
 ---
 
+## 多模态(图片输入)
+
+`Content` 可携带图片(`images`),支持视觉:
+
+```cpp
+Message m;
+m.role = Role::User;
+m.content.text = "What's in this image?";
+ImageRef img;
+img.url = "https://example.com/cat.png";   // OpenAI image_url(也可用 data: URI)
+m.content.images.push_back(img);
+// Anthropic 用 base64: img.media_type="image/png"; img.data="<base64>";
+```
+
+OpenAI provider 发 `image_url`;Anthropic provider 发 `image`(base64 优先,否则 url source)。`images` 为空即纯文本(默认)。
+
+---
+
 ## 5. 生成参数(model / temperature / max_tokens)
 
 通过 `AgentOptions::generate`(`GenerateOptions`):

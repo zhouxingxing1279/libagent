@@ -80,9 +80,10 @@
   `tool_choice`(`"auto"`/`"none"`/`"required"` 或具体函数对象)、`seed`。OpenAI provider 序列化这三项;
   `types.cpp` 的规范序列化也覆盖。新增序列化测试。Anthropic 的 tool_choice 格式不同,留作后续。
 
-### ☐ 11. 多模态 Content — `M`
-- **现状**:`Content` 仅文本。
-- **范围**:扩展 `Content` 支持 `image_url` 等;provider 适配视觉。
+### ☑ 11. 多模态 Content — `M`
+- **完成**:`Content` 加可选 `images`(`ImageRef`:url + 可选 media_type/base64),纯文本保持 text 快路径不变。
+  OpenAI provider 发 `image_url` 块;Anthropic provider 发 `image` 块(base64 优先,否则 url source)。
+  `types.cpp` 规范序列化覆盖。新增 OpenAI + Anthropic 各 1 个多模态测试。
 
 ### ☐ 12. 记忆持久化 — `M`
 - **范围**:`Memory` 加 save/load(磁盘/DB),支持跨会话;可序列化 `Message`(已有 JSON 序列化基础)。
