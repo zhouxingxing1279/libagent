@@ -1,6 +1,7 @@
 #include "libagent/providers/openai.hpp"
 
 #include "http/https_client.hpp"
+#include "libagent/error.hpp"
 #include "libagent/json.hpp"
 #include "libagent/types.hpp"
 
@@ -35,6 +36,13 @@ FinishReason map_finish(const std::string& s) {
     if (s == "tool_calls") return FinishReason::ToolCalls;
     if (s == "content_filter") return FinishReason::ContentFilter;
     return FinishReason::Error;
+}
+
+ErrorCode classify_http_status(unsigned status) {
+    if (status == 401 || status == 403) return ErrorCode::Auth;
+    if (status == 429) return ErrorCode::RateLimited;
+    if (status == 408) return ErrorCode::Timeout;
+    return ErrorCode::Http;
 }
 
 Json build_body(const Options& o, const ChatRequest& req, bool stream) {
@@ -273,13 +281,15 @@ boost::asio::awaitable<ChatResponse> OpenAiProvider::chat(const ChatRequest& req
 
     http::Response resp = co_await send_with_retry(hr, opts_);
     if (resp.status >= 400) {
-        throw std::runtime_error("OpenAI chat failed (HTTP " +
-                                 std::to_string(resp.status) + "): " + resp.body);
+        throw Error{classify_http_status(resp.status),
+                    "OpenAI chat failed (HTTP " + std::to_string(resp.status) +
+                        "): " + resp.body,
+                    static_cast<int>(resp.status)};
     }
 
     const Json j = Json::parse(resp.body, nullptr, false);
     if (!j.is_object()) {
-        throw std::runtime_error("OpenAI chat: malformed JSON response");
+        throw Error{ErrorCode::Provider, "OpenAI chat: malformed JSON response"};
     }
     co_return parse_response(j);
 }

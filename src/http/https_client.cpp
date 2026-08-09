@@ -1,8 +1,10 @@
 #include "https_client.hpp"
 
+#include "libagent/error.hpp"
 #include "libagent/version.h"
 
 #include <boost/asio/connect.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/ssl.hpp>
@@ -179,10 +181,15 @@ net::awaitable<Response> HttpsClient::request(const Request& req) {
         co_await stream.async_connect(results, net::use_awaitable);
         co_return co_await round_trip(stream, req);
     } catch (const boost::system::system_error& e) {
-        if (is_timeout(e.code())) {
-            throw std::runtime_error(timeout_message(req.timeout));
+        if (e.code() == boost::asio::error::operation_aborted) {
+            throw;  // cancellation propagates as-is (system_error)
         }
-        throw;
+        if (is_timeout(e.code())) {
+            throw libagent::Error{libagent::ErrorCode::Timeout,
+                                  timeout_message(req.timeout)};
+        }
+        throw libagent::Error{libagent::ErrorCode::Network,
+                              "libagent: network error: " + std::string(e.what())};
     }
 }
 
@@ -214,10 +221,15 @@ net::awaitable<Response> HttpsClient::request_stream(
         co_await stream.async_connect(results, net::use_awaitable);
         co_return co_await stream_body(stream, req, on_chunk);
     } catch (const boost::system::system_error& e) {
-        if (is_timeout(e.code())) {
-            throw std::runtime_error(timeout_message(req.timeout));
+        if (e.code() == boost::asio::error::operation_aborted) {
+            throw;  // cancellation propagates as-is (system_error)
         }
-        throw;
+        if (is_timeout(e.code())) {
+            throw libagent::Error{libagent::ErrorCode::Timeout,
+                                  timeout_message(req.timeout)};
+        }
+        throw libagent::Error{libagent::ErrorCode::Network,
+                              "libagent: network error: " + std::string(e.what())};
     }
 }
 

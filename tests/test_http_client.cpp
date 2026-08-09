@@ -1,5 +1,6 @@
 #include "http/https_client.hpp"
 #include "fakes/test_http_server.hpp"
+#include "libagent/error.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -138,7 +139,12 @@ TEST(HttpsClient, ReadTimeoutAbortsStalledServer) {
     }
     ioc.stop();
 
-    EXPECT_THROW({ (void)fut.get(); }, std::runtime_error);
+    try {
+        (void)fut.get();
+        FAIL() << "expected a timeout Error";
+    } catch (const libagent::Error& e) {
+        EXPECT_EQ(e.code(), libagent::ErrorCode::Timeout);
+    }
 }
 
 }  // namespace

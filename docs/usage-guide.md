@@ -253,6 +253,33 @@ std::string reply = agent.run("long task", sig.slot());
 
 ---
 
+## 错误处理
+
+provider / 网络层的错误以 `libagent::Error`(继承自 `std::runtime_error`,所以既有的
+`catch (const std::runtime_error&)` 仍生效)抛出,带类型化 `ErrorCode` 与可选 HTTP 状态码,
+便于程序化处理:
+
+```cpp
+try {
+    reply = agent.run("...");
+} catch (const libagent::Error& e) {
+    switch (e.code()) {
+        case libagent::ErrorCode::Timeout:     /* 超时,可重试 */     break;
+        case libagent::ErrorCode::RateLimited: /* 限流,退避重试 */   break;
+        case libagent::ErrorCode::Auth:        /* key/权限问题 */     break;
+        case libagent::ErrorCode::Network:     /* 传输错误 */         break;
+        default: /* 其它: e.what()、e.http_status() */              break;
+    }
+}
+```
+
+`ErrorCode` 取值:`Timeout` / `Network` / `Auth`(401·403)/ `RateLimited`(429)/ `Http`(其它
+错误状态)/ `Provider`(响应解析失败)。取消目前仍以 asio 的 `operation_aborted`
+(`system_error`)形式传播。工具执行错误**不**抛异常——它们被转成 `{"error":...}` 消息回灌
+给模型(这是 agent 的内置恢复机制)。
+
+---
+
 ## 7. 记忆:Full / Window / Summarizing
 
 - `FullMemory()` —— 完整对话,不截断(自己负责控制长度)。

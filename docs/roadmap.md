@@ -30,11 +30,13 @@
   RAII guard 在取消/异常时 `terminate()` 杀子进程,取消经 `cancellation_state` 判定后传播。
   新增 2 个测试(agent 取消、cli 取消传播+杀子进程)。
 
-### ☐ 4. 统一错误类型 — `M`
-- **现状**:异常 + ad-hoc `{"error":...}` 混用,调用方难程序化处理。
-- **目标**:一致的错误模型。
-- **范围**:定义 `libagent::Error{Code, message}` + `Result<T>`(或 `std::expected`);provider/agent/tool 统一使用;保留异常路径兼容。
-- **涉及**:新增 `error.hpp`;横切适配
+### ☑ 4. 统一错误类型 — `M`
+- **完成**:新增 `libagent::Error`(继承 `std::runtime_error`,向后兼容)+ `ErrorCode` 枚举
+  (`Timeout`/`Network`/`Auth`/`RateLimited`/`Http`/`Provider`/...) + `http_status()`。在边界抛出
+  有类型错误:https_client(超时→Timeout、传输→Network,取消仍以 operation_aborted 传播)、
+  openai provider(HTTP 状态分类、malformed→Provider)。新增 2 个类型化测试。
+- **待续**:完整的 `Result<T>`(把 `awaitable<T>` 改成返回 `Result<T>`)是侵入式重构、收益有限,
+  暂缓;有类型的异常已满足"程序化区分错误"的需求。
 
 ### ☐ 5. 日志 + 可观测钩子 — `M`
 - **现状**:`spdlog` 是 PRIVATE 依赖却**完全没用**,靠 `std::cerr`。

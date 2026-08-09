@@ -1,4 +1,5 @@
 #include "libagent/providers/openai.hpp"
+#include "libagent/error.hpp"
 #include "fakes/test_http_server.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -193,6 +194,43 @@ TEST(OpenAiProvider, StreamAssemblesDeltasAndFinish) {
 
     EXPECT_EQ(assembled, "Hello");
     EXPECT_EQ(finish, FinishReason::Stop);
+}
+
+TEST(OpenAiProvider, HttpErrorIsTyped) {
+    boost::asio::io_context ioc;
+    auto acceptor = ts::make_local_acceptor(ioc);
+    const unsigned port = acceptor.local_endpoint().port();
+
+    ts::CannedResponse resp;
+    resp.status = 401;  // auth error — not retried, surfaces as a typed Error
+    resp.body = R"({"error":"invalid api key"})";
+
+    std::string a, b;
+    boost::asio::co_spawn(ioc, ts::serve_one(acceptor, resp, a, b), boost::asio::detached);
+
+    openai::Options opts;
+    opts.api_key = "k";
+    opts.base_url = "http://127.0.0.1:" + std::to_string(port);
+    opts.max_retries = 0;
+    openai::OpenAiProvider provider(std::move(opts));
+
+    auto fut = boost::asio::co_spawn(
+        ioc,
+        [&]() -> awaitable<ChatResponse> {
+            ChatRequest req;
+            req.messages.push_back({Role::User, Content{"hi"}});
+            co_return co_await provider.chat(req);
+        },
+        boost::asio::use_future);
+    ioc.run();
+
+    try {
+        (void)fut.get();
+        FAIL() << "expected an auth Error";
+    } catch (const Error& e) {
+        EXPECT_EQ(e.code(), ErrorCode::Auth);
+        EXPECT_EQ(e.http_status(), 401);
+    }
 }
 
 TEST(OpenAiProvider, RetriesOn429ThenSucceeds) {
