@@ -69,6 +69,27 @@ std::string timeout_message(std::chrono::steady_clock::duration d) {
            std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(d).count()) + "ms";
 }
 
+// Load CA locations for TLS verification. OpenSSL's compiled default
+// (set_default_verify_paths) is empty on some platforms (notably macOS without
+// its OpenSSL in the default search path), so also load well-known CA bundle
+// files; any that exist accumulate.
+void load_verify_locations(net::ssl::context& ctx) {
+    boost::system::error_code ec;
+    ctx.set_default_verify_paths(ec);
+    static constexpr const char* kBundles[] = {
+        "/etc/ssl/cert.pem",                       // macOS system / some Linux
+        "/etc/ssl/certs/ca-certificates.crt",      // Debian/Ubuntu
+        "/etc/ssl/certs/ca-bundle.crt",            // RHEL/Fedora (newer)
+        "/etc/pki/tls/certs/ca-bundle.crt",        // RHEL/Fedora (older)
+        "/opt/homebrew/etc/openssl@3/cert.pem",    // Homebrew (Apple Silicon)
+        "/opt/homebrew/etc/ca-certificates/cert.pem",
+        "/usr/local/etc/openssl@3/cert.pem",       // Homebrew (Intel)
+    };
+    for (const char* path : kBundles) {
+        ctx.load_verify_file(path, ec);  // ignore errors (file may not exist)
+    }
+}
+
 // Best-effort connection shutdown. SSL gets an async TLS close_notify (stream
 // truncation errors ignored); plain sockets close immediately.
 template <class Stream>
@@ -164,7 +185,7 @@ net::awaitable<Response> HttpsClient::request(const Request& req) {
 
         if (req.use_tls) {
             net::ssl::context ctx(net::ssl::context::tlsv12_client);
-            ctx.set_default_verify_paths();
+            load_verify_locations(ctx);
             ssl_stream stream(ex, ctx);
             if (!SSL_set_tlsext_host_name(stream.native_handle(), req.host.c_str())) {
                 throw std::runtime_error("libagent: SNI setup failed for " + req.host);
@@ -204,7 +225,7 @@ net::awaitable<Response> HttpsClient::request_stream(
 
         if (req.use_tls) {
             net::ssl::context ctx(net::ssl::context::tlsv12_client);
-            ctx.set_default_verify_paths();
+            load_verify_locations(ctx);
             ssl_stream stream(ex, ctx);
             if (!SSL_set_tlsext_host_name(stream.native_handle(), req.host.c_str())) {
                 throw std::runtime_error("libagent: SNI setup failed for " + req.host);
