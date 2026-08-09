@@ -12,7 +12,9 @@ set(libagent_tests
     test_agent
     test_orchestration
     test_summarizing_memory
-    test_rag)
+    test_rag
+    test_vector_retriever
+    test_openai_embeddings)
 
 foreach(t IN LISTS libagent_tests)
     add_executable(${t} ${t}.cpp)

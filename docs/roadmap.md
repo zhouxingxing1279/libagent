@@ -69,9 +69,11 @@
   system 顶层/工具结果合并)。抽象跨厂商验证通过。
 - **待人工验证**:真实 Anthropic API 需 Anthropic key(实网)。
 
-### ☐ 9. EmbeddingProvider + 向量 RAG — `M`
-- **现状**:`SimpleCorpusRetriever` 仅关键词重叠。
-- **范围**:`EmbeddingProvider` 接口;基于向量的 `Retriever`(本地 HNSW 或外部);文档切块(chunking)。
+### ☑ 9. EmbeddingProvider + 向量 RAG — `M`
+- **完成**:`include/libagent/embedding.hpp`(`EmbeddingProvider` 接口)+
+  `include/libagent/retrievers/vector.hpp`(`VectorRetriever`:余弦相似度 top-k,header-only)+ `chunk_text()`
+  分块 + `include/libagent/providers/openai_embeddings.hpp`(`openai::Embedder`,OpenAI 兼容 embeddings 端点)。
+  3 个离线测试(VectorRetriever 排序、分块、embedder 解析)。
 
 ### ☐ 10. 结构化输出 — `S`
 - **范围**:`GenerateOptions` 加 `response_format`(JSON mode)、`tool_choice`(auto/none/required/specific)、`seed`;provider 序列化。

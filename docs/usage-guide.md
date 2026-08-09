@@ -350,9 +350,22 @@ a.retriever  = retriever;
 a.rag_top_k  = 3;
 ```
 
-`SimpleCorpusRetriever` 是零依赖、按词重叠排序的本地检索器,适合起步与测试;
-要更强的语义检索,实现 `Retriever` 接口(`retrieve(query, k) -> awaitable<vector<RetrievedChunk>>`)
-替换即可,Agent 代码无需改动。
+`SimpleCorpusRetriever` 是零依赖、按词重叠排序的本地检索器,适合起步与测试。
+
+更强的**语义检索**用 `VectorRetriever`(`include/libagent/retrievers/vector.hpp`):基于
+`EmbeddingProvider` 产生的向量做余弦相似度排序。配 OpenAI 兼容 embedder:
+
+```cpp
+#include <libagent/retrievers/vector.hpp>
+#include <libagent/providers/openai_embeddings.hpp>
+
+auto embedder = std::make_shared<openai::Embedder>(openai::EmbedderOptions{/*.api_key=...*/});
+auto retriever = std::make_shared<VectorRetriever>(embedder);
+// co_await retriever->add("document text");  // 入库时 embed 一次;检索时 embed query + 余弦 top-k
+a.retriever = retriever;
+```
+
+也可实现自己的 `EmbeddingProvider`(本地模型)。长文档用 `chunk_text(text, max_chars)` 分块后逐块入库。
 
 ---
 

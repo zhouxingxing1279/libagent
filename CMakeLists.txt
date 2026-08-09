@@ -60,6 +60,7 @@ add_library(libagent
     src/http/https_client.cpp
     src/http/retry.cpp
     src/providers/openai/openai_provider.cpp
+    src/providers/openai/openai_embeddings.cpp
     src/providers/anthropic/anthropic_provider.cpp
     src/agent.cpp
     src/orchestration.cpp
