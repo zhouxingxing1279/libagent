@@ -100,8 +100,10 @@
   ——每个 agent 跑在各自 strand 上即可(strand 串行化其协程)。新增多线程测试(8 agent × 各自 strand × 4 线程,
   全部正确完成)。文档说明多线程模型与"共享可变状态须放共享 strand"。
 
-### ☐ 15. 更多开箱即用工具 — `S/M`
-- **范围**:沿 `cli::command` 思路做 `http_get`、`sqlite_query`、`web_search` 等常用工具 helper。
+### ☑ 15. 更多开箱即用工具 — `S/M`
+- **完成**:新增原生 `tools::http_get`(`include/libagent/tools/http.hpp` + `src/tools/http.cpp`)——
+  用内置 HTTPS 客户端按 `{url}` 做 GET,返回 `{status,body}`(大 body 截断、错误转 `{error}`),不需子进程。
+  新增本地服务器测试。(sqlite/web_search 等需要额外依赖或 API key,留作后续。)
 
 ---
 

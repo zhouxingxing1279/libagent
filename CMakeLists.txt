@@ -64,7 +64,8 @@ add_library(libagent
     src/providers/anthropic/anthropic_provider.cpp
     src/agent.cpp
     src/orchestration.cpp
-    src/summarizing_memory.cpp)
+    src/summarizing_memory.cpp
+    src/tools/http.cpp)
 add_library(libagent::libagent ALIAS libagent)
 
 libagent_target_warnings(libagent)

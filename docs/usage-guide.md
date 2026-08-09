@@ -174,6 +174,12 @@ a.tools->add(command(
 > target_link_libraries(my_app PRIVATE libagent::libagent Boost::process)
 > ```
 
+还有原生 **`http_get`**(`include/libagent/tools/http.hpp`,不需要子进程,直接用内置 HTTPS 客户端):
+
+```cpp
+a.tools->add(tools::http_get("fetch", "Fetch a URL by HTTP GET"));
+```
+
 ---
 
 ## 多模态(图片输入)
