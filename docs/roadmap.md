@@ -53,9 +53,9 @@
 ### ☑ 7. 跨平台 TLS 证书 — `S`
 - **完成**:`https_client` 在 `set_default_verify_paths()` 之外,额外尝试加载一组常见 CA bundle
   路径(macOS Homebrew、`/etc/ssl/cert.pem`、Debian `ca-certificates.crt`、RHEL `ca-bundle.crt` 等),
-  提高跨平台证书验证可靠性(OpenSSL 默认路径在某些 macOS/Windows 配置下为空)。49/49 离线测试绿。
-- **待人工验证**:证书验证只能用真实 HTTPS 确认 —— 需跑一次 `examples/hello_agent`(任意 OpenAI 兼容端点)
-  确认 TLS 验证仍通过(回归)。内置 Mozilla CA bundle 兜底 / 自定义 CA 路径留作后续。
+  提高跨平台证书验证可靠性(OpenSSL 默认路径在某些 macOS/Windows 配置下为空)。49/49 离线测试绿;
+  实网回归通过(`examples/hello_agent` 对 DeepSeek HTTPS 成功)。
+- **后续**:内置 Mozilla CA bundle 兜底 / 自定义 CA 路径(corporate MITM)留作可选增强。
 
 ---
 
