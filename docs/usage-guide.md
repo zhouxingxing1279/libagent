@@ -425,6 +425,17 @@ std::string reply = asio::co_spawn(
 
 运行时还能 `router.add_agent({...})` 动态注册。
 
+**异步消息总线**(`include/libagent/agent_bus.hpp`):若需要 agent 之间真正异步收发消息
+(而非 HandoffRouter 的同步委托),用 `AgentBus`(每个 agent 一个缓冲 channel):
+
+```cpp
+AgentBus bus(ioc.get_executor());
+bus.register_agent("worker");
+// 一处:co_await bus.post("worker", {Role::User, Content{"do X"}});
+// 另一处:Message m = co_await bus.await_message("worker");
+// bus.close("worker");  // 让等待者收到错误退出
+```
+
 ---
 
 ## 10. 切换 / 新增 Provider

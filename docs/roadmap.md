@@ -90,9 +90,10 @@
   + `save_to_file`/`load_from_file`。复用 Message 的 JSON 序列化,适用于任何 Memory 实现(Full/Window/Summarizing)。
   不改动 Memory 接口。新增 JSON 往返 + 文件往返 2 个测试。
 
-### ☐ 13. AgentBus(多 agent 异步消息)— `M`
-- **现状**:Phase 4 暂缓;`HandoffRouter` 只做同步委派。
-- **范围**:基于 `asio::experimental::channel` 的 per-agent FIFO,实现真正的异步 agent 间消息传递。
+### ☑ 13. AgentBus(多 agent 异步消息)— `M`
+- **完成**:`include/libagent/agent_bus.hpp`(header-only):每个注册 agent 一个缓冲
+  `channel<void(error_code, Message)>`;`post`/`await_message`/`close`。补充了 Phase 4 暂缓的异步消息
+  能力(与 `HandoffRouter` 的同步委托互补)。3 个测试(收发、缓冲顺序、close 退出)。
 
 ### ☐ 14. 多线程 io_context — `M`
 - **现状**:仅单线程,无锁。
