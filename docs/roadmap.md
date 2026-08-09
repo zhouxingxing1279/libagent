@@ -45,10 +45,10 @@
   CMake `-DLIBAGENT_WITH_SPDLOG=ON` 门控)——核心库不依赖 spdlog,默认构建精简。
   新增 hooks 测试 + 2 个 spdlog adapter 测试。
 
-### ☐ 6. 工具输出大小限制 — `S`
-- **现状**:工具输出无截断,大输出可能撑爆上下文窗口。
-- **范围**:`AgentOptions.max_tool_output_bytes`;超长截断并标注;`cli::command` 加 `max_output`。
-- **涉及**:`tool.hpp`、`agent.cpp`、`tools/cli.hpp`
+### ☑ 6. 工具输出大小限制 — `S`
+- **完成**:`AgentOptions.max_tool_output_bytes`(默认 0=不限)。`execute_tool` 对超长工具结果
+  截断并追加 `...[truncated by libagent: N bytes total]`,保护上下文窗口(覆盖所有工具,含 `cli::command`)。
+  新增截断测试。
 
 ### ☐ 7. 跨平台 TLS 证书 — `S`
 - **现状**:macOS 上 `set_default_verify_paths()` 不含 Keychain。

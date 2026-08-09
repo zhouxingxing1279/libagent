@@ -125,6 +125,14 @@ boost::asio::awaitable<Message> Agent::execute_tool(const ToolCall& tc) {
         }
     }
 
+    if (opts_.max_tool_output_bytes != 0 &&
+        result.content.text.size() > opts_.max_tool_output_bytes) {
+        const std::size_t orig = result.content.text.size();
+        result.content.text.resize(opts_.max_tool_output_bytes);
+        result.content.text +=
+            "\n...[truncated by libagent: " + std::to_string(orig) + " bytes total]";
+    }
+
     const auto dur = std::chrono::steady_clock::now() - t0;
     if (opts_.hooks.on_tool_call) {
         opts_.hooks.on_tool_call(tc, out_json, dur);

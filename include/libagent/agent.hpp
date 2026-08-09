@@ -12,6 +12,7 @@
 #include <boost/asio/cancellation_signal.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -56,6 +57,9 @@ struct AgentOptions {
 
     GenerateOptions generate;
     int max_tool_rounds = 10;  ///< ReAct safety bound.
+    /// Max bytes of a tool result before it is truncated (0 = unlimited).
+    /// Guards the context window against huge tool output.
+    std::size_t max_tool_output_bytes = 0;
 };
 
 /// An agent runs a ReAct loop: prompt the provider, and whenever the model

@@ -68,6 +68,7 @@ ioc.run();
 | `rag_top_k` | `int` (=3) | 每轮检索的片段数 |
 | `generate` | `GenerateOptions` | 生成参数,见 §5 |
 | `max_tool_rounds` | `int` (=10) | ReAct 安全上限 |
+| `max_tool_output_bytes` | `size_t` (=0) | 工具结果字节数上限,超出截断标注(0=不限) |
 
 ```cpp
 AgentOptions a;

@@ -410,4 +410,42 @@ TEST(Agent, HooksFireOnMessageLlmAndTool) {
     EXPECT_EQ(tool_calls, 1);
 }
 
+TEST(Agent, ToolOutputIsTruncated) {
+    auto provider = std::make_shared<fakes::FakeProvider>();
+    PushToolCall(*provider, "c1", "big", Json::object());
+    PushAssistant(*provider, "done", FinishReason::Stop);
+
+    auto tools = std::make_shared<ToolRegistry>();
+    Tool t;
+    t.spec.name = "big";
+    t.spec.parameters = Json::object();
+    t.handler = [](const Json&) -> awaitable<Json> {
+        co_return Json{{"data", std::string(10000, 'x')}};
+    };
+    tools->add(std::move(t));
+
+    AgentOptions opts;
+    opts.provider = provider;
+    opts.memory = std::make_shared<FullMemory>();
+    opts.tools = tools;
+    opts.max_tool_output_bytes = 100;
+    Agent agent(opts);
+
+    AgentRunner runner;
+    auto fut = runner.run([&]() -> awaitable<std::string> {
+        co_return co_await agent.co_run("go");
+    });
+    fut.get();
+
+    bool found = false;
+    for (const auto& m : opts.memory->history()) {
+        if (m.role == Role::Tool) {
+            found = true;
+            EXPECT_NE(m.content.text.find("truncated"), std::string::npos);
+            EXPECT_LE(m.content.text.size(), 200u);  // ~100 + short note
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
 }  // namespace
