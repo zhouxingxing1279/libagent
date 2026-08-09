@@ -280,6 +280,26 @@ std::string reply = agent.run("long task", sig.slot());
 
 ---
 
+## 多线程
+
+libagent 全程用 `this_coro::executor`,**strand 感知**:可在多线程 `io_context` 上运行——
+**每个 agent 跑在自己的 strand 上**即可(strand 串行化该 agent 的所有协程,状态访问安全):
+
+```cpp
+boost::asio::io_context ioc;
+auto strand = boost::asio::make_strand(ioc.get_executor());
+auto fut = boost::asio::co_spawn(strand, agent.co_run("..."), boost::asio::use_future);
+// 多线程跑 io_context:
+std::vector<std::thread> pool;
+for (int i = 0; i < 4; ++i) pool.emplace_back([&] { ioc.run(); });
+fut.get();
+```
+
+> 多个 agent 各用独立 strand + 各自的 memory/tools → 互不干扰。**跨 agent 共享 memory 等可变状态时,
+> 这些状态必须放在共享 strand 上**,否则需自行加锁。
+
+---
+
 ## 错误处理
 
 provider / 网络层的错误以 `libagent::Error`(继承自 `std::runtime_error`,所以既有的

@@ -7,7 +7,9 @@
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -15,8 +17,12 @@
 
 #include <gtest/gtest.h>
 
+#include <future>
 #include <memory>
+#include <set>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -446,6 +452,54 @@ TEST(Agent, ToolOutputIsTruncated) {
         }
     }
     EXPECT_TRUE(found);
+}
+
+TEST(Agent, RunsConcurrentlyAcrossMultipleThreads) {
+    // N independent agents, each on its own strand, on a 4-thread io_context.
+    // Validates that the framework is strand-aware and safe to run
+    // multi-threaded (each agent's state is isolated).
+    constexpr int kAgents = 8;
+    constexpr int kThreads = 4;
+
+    boost::asio::io_context ioc;
+    auto work = boost::asio::make_work_guard(ioc);
+    std::vector<std::thread> pool;
+    for (int i = 0; i < kThreads; ++i) {
+        pool.emplace_back([&] { ioc.run(); });
+    }
+
+    std::vector<std::shared_ptr<Agent>> agents;
+    std::vector<std::future<std::string>> futs;
+    for (int i = 0; i < kAgents; ++i) {
+        auto provider = std::make_shared<fakes::FakeProvider>();
+        PushToolCall(*provider, "c", "echo_tool", Json::object());
+        PushAssistant(*provider, "answer " + std::to_string(i), FinishReason::Stop);
+
+        auto tools = std::make_shared<ToolRegistry>();
+        tools->add(echo_tool("echo_tool"));
+
+        AgentOptions opts;
+        opts.provider = provider;
+        opts.memory = std::make_shared<FullMemory>();
+        opts.tools = tools;
+        agents.push_back(std::make_shared<Agent>(opts));
+
+        auto strand = boost::asio::make_strand(ioc.get_executor());
+        futs.push_back(boost::asio::co_spawn(strand, agents.back()->co_run("go"),
+                                             boost::asio::use_future));
+    }
+
+    std::set<std::string> results;
+    for (auto& f : futs) {
+        results.insert(f.get());
+    }
+
+    work.reset();
+    for (auto& t : pool) {
+        t.join();
+    }
+
+    EXPECT_EQ(results.size(), static_cast<std::size_t>(kAgents));  // all distinct
 }
 
 }  // namespace

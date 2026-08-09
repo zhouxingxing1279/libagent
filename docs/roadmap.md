@@ -95,9 +95,10 @@
   `channel<void(error_code, Message)>`;`post`/`await_message`/`close`。补充了 Phase 4 暂缓的异步消息
   能力(与 `HandoffRouter` 的同步委托互补)。3 个测试(收发、缓冲顺序、close 退出)。
 
-### ☐ 14. 多线程 io_context — `M`
-- **现状**:仅单线程,无锁。
-- **范围**:用 `strand` 包裹共享状态;`co_spawn(strand, ...)`;并发工具执行与多线程统一。
+### ☑ 14. 多线程 io_context — `M`
+- **完成**:确认框架全程使用 `this_coro::executor`(strand 感知),**已可在多线程 io_context 上运行**
+  ——每个 agent 跑在各自 strand 上即可(strand 串行化其协程)。新增多线程测试(8 agent × 各自 strand × 4 线程,
+  全部正确完成)。文档说明多线程模型与"共享可变状态须放共享 strand"。
 
 ### ☐ 15. 更多开箱即用工具 — `S/M`
 - **范围**:沿 `cli::command` 思路做 `http_get`、`sqlite_query`、`web_search` 等常用工具 helper。
