@@ -1,5 +1,6 @@
 #pragma once
 
+#include "libagent/logging.hpp"
 #include "libagent/memory.hpp"
 #include "libagent/provider.hpp"
 #include "libagent/retriever.hpp"
@@ -10,12 +11,29 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 
+#include <chrono>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace libagent {
+
+/// Structured observability hooks. All are optional; invoked synchronously
+/// from the agent coroutine, so keep them cheap and non-blocking.
+struct Hooks {
+    /// Any message persisted to memory (user, assistant, tool results).
+    std::function<void(const Message&)> on_message;
+    /// One provider chat call, with its request, response, and duration.
+    std::function<void(const ChatRequest&, const ChatResponse&,
+                       std::chrono::steady_clock::duration)>
+        on_llm_call;
+    /// One tool execution, with its call, result JSON, and duration.
+    std::function<void(const ToolCall&, const Json&,
+                       std::chrono::steady_clock::duration)>
+        on_tool_call;
+};
 
 struct AgentOptions {
     std::shared_ptr<LLMProvider> provider;
@@ -30,6 +48,11 @@ struct AgentOptions {
     /// chunks for the latest user query each step and injects them as context.
     std::shared_ptr<Retriever> retriever;
     int rag_top_k = 3;
+
+    /// Structured observability callbacks (durations via steady_clock).
+    Hooks hooks;
+    /// Simple text log sink, invoked for LLM/tool calls and errors.
+    LogSink log;
 
     GenerateOptions generate;
     int max_tool_rounds = 10;  ///< ReAct safety bound.
@@ -72,6 +95,9 @@ private:
 
     std::vector<Message> build_messages(const std::string& context) const;
     std::string latest_user_query() const;
+
+    void remember(Message m);  // persist to memory + on_message hook
+    void do_log(LogLevel level, std::string msg) const;
 
     AgentOptions opts_;
 };

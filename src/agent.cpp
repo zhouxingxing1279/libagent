@@ -1,5 +1,7 @@
 #include "libagent/agent.hpp"
 
+#include "libagent/logging.hpp"
+
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -9,6 +11,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 
+#include <chrono>
 #include <exception>
 #include <iterator>
 #include <string>
@@ -32,6 +35,19 @@ std::string join_context(const std::vector<RetrievedChunk>& chunks) {
 }  // namespace
 
 Agent::Agent(AgentOptions opts) : opts_(std::move(opts)) {}
+
+void Agent::remember(Message m) {
+    if (opts_.hooks.on_message) {
+        opts_.hooks.on_message(m);
+    }
+    opts_.memory->add(std::move(m));
+}
+
+void Agent::do_log(LogLevel level, std::string msg) const {
+    if (opts_.log) {
+        opts_.log(level, msg);
+    }
+}
 
 std::vector<Message> Agent::build_messages(const std::string& context) const {
     auto history = opts_.memory->history();
@@ -89,21 +105,31 @@ boost::asio::awaitable<ChatRequest> Agent::prepare_request() {
 }
 
 boost::asio::awaitable<Message> Agent::execute_tool(const ToolCall& tc) {
+    const auto t0 = std::chrono::steady_clock::now();
     Message result{Role::Tool};
     result.tool_call_id = tc.id;
     result.name = tc.name;
 
+    Json out_json;
     const Tool* tool = opts_.tools->find(tc.name);
     if (tool == nullptr) {
-        result.content.text = Json{{"error", "unknown tool: " + tc.name}}.dump();
-        co_return result;
+        out_json = Json{{"error", "unknown tool: " + tc.name}};
+        result.content.text = out_json.dump();
+    } else {
+        try {
+            out_json = co_await tool->handler(tc.arguments);
+            result.content.text = out_json.dump();
+        } catch (const std::exception& e) {
+            out_json = Json{{"error", e.what()}};
+            result.content.text = out_json.dump();
+        }
     }
-    try {
-        const Json out = co_await tool->handler(tc.arguments);
-        result.content.text = out.dump();
-    } catch (const std::exception& e) {
-        result.content.text = Json{{"error", e.what()}}.dump();
+
+    const auto dur = std::chrono::steady_clock::now() - t0;
+    if (opts_.hooks.on_tool_call) {
+        opts_.hooks.on_tool_call(tc, out_json, dur);
     }
+    do_log(LogLevel::Info, "tool '" + tc.name + "' completed");
     co_return result;
 }
 
@@ -136,21 +162,28 @@ boost::asio::awaitable<void> Agent::execute_tool_calls(
 
     for (std::size_t i = 0; i < calls.size(); ++i) {
         const std::size_t idx = co_await chan->async_receive(boost::asio::use_awaitable);
-        opts_.memory->add(std::move((*results)[idx]));
+        remember(std::move((*results)[idx]));
     }
     co_return;
 }
 
 boost::asio::awaitable<ChatResponse> Agent::step() {
     ChatRequest req = co_await prepare_request();
+    const auto t0 = std::chrono::steady_clock::now();
     ChatResponse resp = co_await opts_.provider->chat(req);
-    opts_.memory->add(resp.message);
+    const auto dur = std::chrono::steady_clock::now() - t0;
+    if (opts_.hooks.on_llm_call) {
+        opts_.hooks.on_llm_call(req, resp, dur);
+    }
+    do_log(LogLevel::Info,
+           "llm call: finish=" + std::to_string(static_cast<int>(resp.finish)));
+    remember(resp.message);
     co_await execute_tool_calls(resp.message.tool_calls);
     co_return resp;
 }
 
 boost::asio::awaitable<std::string> Agent::co_run(std::string user_input) {
-    opts_.memory->add({Role::User, Content{std::move(user_input)}});
+    remember({Role::User, Content{std::move(user_input)}});
 
     for (int step_n = 0; step_n < opts_.max_tool_rounds; ++step_n) {
         const ChatResponse resp = co_await step();
@@ -163,7 +196,7 @@ boost::asio::awaitable<std::string> Agent::co_run(std::string user_input) {
 
 boost::asio::awaitable<void> Agent::co_run_stream(std::string user_input,
                                                   TokenSink sink) {
-    opts_.memory->add({Role::User, Content{std::move(user_input)}});
+    remember({Role::User, Content{std::move(user_input)}});
 
     for (int step_n = 0; step_n < opts_.max_tool_rounds; ++step_n) {
         const ChatRequest req = co_await prepare_request();
@@ -199,7 +232,7 @@ boost::asio::awaitable<void> Agent::co_run_stream(std::string user_input,
             co_return;
         }
 
-        opts_.memory->add(assistant);
+        remember(assistant);
 
         if (assistant.tool_calls.empty()) {
             StreamEvent f;

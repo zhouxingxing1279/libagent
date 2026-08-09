@@ -374,4 +374,40 @@ TEST(Agent, RunIsCancellableViaCancellationSlot) {
     EXPECT_THROW({ (void)fut.get(); }, boost::system::system_error);
 }
 
+TEST(Agent, HooksFireOnMessageLlmAndTool) {
+    auto provider = std::make_shared<fakes::FakeProvider>();
+    PushToolCall(*provider, "c1", "echo_tool", Json::object());
+    PushAssistant(*provider, "done", FinishReason::Stop);
+
+    auto tools = std::make_shared<ToolRegistry>();
+    tools->add(echo_tool("echo_tool"));
+
+    int messages = 0;
+    int llm_calls = 0;
+    int tool_calls = 0;
+    AgentOptions opts;
+    opts.provider = provider;
+    opts.memory = std::make_shared<FullMemory>();
+    opts.tools = tools;
+    opts.hooks.on_message = [&](const Message&) { ++messages; };
+    opts.hooks.on_llm_call =
+        [&](const ChatRequest&, const ChatResponse&, std::chrono::steady_clock::duration) {
+            ++llm_calls;
+        };
+    opts.hooks.on_tool_call =
+        [&](const ToolCall&, const Json&, std::chrono::steady_clock::duration) { ++tool_calls; };
+    Agent agent(opts);
+
+    AgentRunner runner;
+    auto fut = runner.run([&]() -> awaitable<std::string> {
+        co_return co_await agent.co_run("go");
+    });
+    EXPECT_EQ(fut.get(), "done");
+
+    // user, assistant(toolcall), tool result, assistant(final)
+    EXPECT_EQ(messages, 4);
+    EXPECT_EQ(llm_calls, 2);
+    EXPECT_EQ(tool_calls, 1);
+}
+
 }  // namespace

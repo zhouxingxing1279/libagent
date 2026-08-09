@@ -34,3 +34,12 @@ if(LIBAGENT_BUILD_TESTS)
 endif()
 
 # spdlog (PRIVATE logging) is added when src/ starts using it (Phase 1+).
+if(LIBAGENT_WITH_SPDLOG)
+    include(FetchContent)
+    FetchContent_Declare(
+        spdlog
+        URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.0.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    set(SPDLOG_INSTALL ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(spdlog)
+endif()

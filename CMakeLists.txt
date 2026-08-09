@@ -14,6 +14,7 @@ option(LIBAGENT_BUILD_EXAMPLES     "Build examples"                      OFF)
 option(LIBAGENT_WITH_SSL           "Enable TLS (HTTPS) support"          ON)
 option(LIBAGENT_WARNINGS_AS_ERRORS "Treat compiler warnings as errors"   ON)
 option(LIBAGENT_BUILD_DOCS         "Build API documentation (Doxygen)"   OFF)
+option(LIBAGENT_WITH_SPDLOG        "Enable the spdlog logging adapter"   OFF)
 
 # ---------------------------------------------------------------------------
 # Global compile settings

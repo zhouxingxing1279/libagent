@@ -34,3 +34,14 @@ if(LIBAGENT_BUILD_TESTS)
     libagent_target_warnings(test_cli_tool)
     gtest_discover_tests(test_cli_tool)
 endif()
+
+# Optional: spdlog logging adapter (opt-in via -DLIBAGENT_WITH_SPDLOG=ON).
+if(LIBAGENT_WITH_SPDLOG)
+    add_executable(test_logging_spdlog test_logging_spdlog.cpp)
+    target_link_libraries(test_logging_spdlog PRIVATE
+        libagent::libagent spdlog::spdlog GTest::gtest_main)
+    target_include_directories(test_logging_spdlog PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
+    libagent_target_warnings(test_logging_spdlog)
+    gtest_discover_tests(test_logging_spdlog)
+endif()

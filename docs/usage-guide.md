@@ -280,6 +280,39 @@ try {
 
 ---
 
+## 日志与可观测钩子
+
+两种可观测方式,都设在 `AgentOptions`:
+
+**结构化钩子**(`hooks`)——每次消息持久化、每次 LLM 调用、每次工具执行时回调,带耗时:
+
+```cpp
+a.hooks.on_message   = [](const Message& m) { /* 记录对话 */ };
+a.hooks.on_llm_call  = [](const ChatRequest& req, const ChatResponse& resp,
+                          std::chrono::steady_clock::duration dt) { /* 计时/计 token */ };
+a.hooks.on_tool_call = [](const ToolCall& tc, const Json& result,
+                          std::chrono::steady_clock::duration dt) { /* 审计 */ };
+```
+
+**简单文本日志**(`log`,`LogSink = function<void(LogLevel, string)>`)——运行时对 LLM/工具调用发文本行:
+
+```cpp
+a.log = [](libagent::LogLevel lvl, const std::string& msg) {
+    std::cerr << "[" << static_cast<int>(lvl) << "] " << msg << "\n";
+};
+```
+
+**接入 spdlog(可选)**:核心 libagent **不依赖** spdlog;需要时用 `-DLIBAGENT_WITH_SPDLOG=ON`
+拉取,再用 adapter:
+
+```cpp
+#include <libagent/logging/spdlog.hpp>
+a.log = libagent::make_spdlog_sink();            // 转发到 spdlog 默认 logger
+// 或:libagent::make_spdlog_sink(my_logger);     // 指定 logger
+```
+
+---
+
 ## 7. 记忆:Full / Window / Summarizing
 
 - `FullMemory()` —— 完整对话,不截断(自己负责控制长度)。

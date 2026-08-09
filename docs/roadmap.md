@@ -38,11 +38,12 @@
 - **待续**:完整的 `Result<T>`(把 `awaitable<T>` 改成返回 `Result<T>`)是侵入式重构、收益有限,
   暂缓;有类型的异常已满足"程序化区分错误"的需求。
 
-### ☐ 5. 日志 + 可观测钩子 — `M`
-- **现状**:`spdlog` 是 PRIVATE 依赖却**完全没用**,靠 `std::cerr`。
-- **目标**:结构化日志 + 运行时钩子。
-- **范围**:接上 spdlog;定义 `LogSink`;`AgentOptions` 加 `hooks{on_llm_call,on_tool_call,on_message}`;记录请求/响应/耗时/token 用量。
-- **涉及**:新增 `logging.hpp`/`hooks`;`agent.cpp`、`openai_provider.cpp`
+### ☑ 5. 日志 + 可观测钩子 — `M`
+- **完成**:`AgentOptions.hooks`(`on_message`/`on_llm_call`/`on_tool_call`,带 `steady_clock` 耗时)
+  + `AgentOptions.log`(`LogSink`,见 `logging.hpp`)。agent 运行时在 LLM 调用、工具执行、消息持久化处
+  触发钩子与日志。spdlog 作为**可选 adapter**(`logging/spdlog.hpp`,`make_spdlog_sink()`,
+  CMake `-DLIBAGENT_WITH_SPDLOG=ON` 门控)——核心库不依赖 spdlog,默认构建精简。
+  新增 hooks 测试 + 2 个 spdlog adapter 测试。
 
 ### ☐ 6. 工具输出大小限制 — `S`
 - **现状**:工具输出无截断,大输出可能撑爆上下文窗口。
