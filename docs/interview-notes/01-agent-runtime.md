@@ -6,6 +6,20 @@
 
 > **当用户调用 `agent.run("...")` 后，libagent 内部到底发生了什么？**
 
+## 1.1 本章源码定位
+
+| 主题 | 代码位置 | 关键符号 |
+| --- | --- | --- |
+| Agent 配置与接口 | `include/libagent/agent.hpp` | `AgentOptions`, `Agent` |
+| Agent Runtime 主实现 | `src/agent.cpp` | `Agent::run`, `Agent::co_run`, `Agent::step`, `Agent::prepare_request` |
+| 消息写入 | `src/agent.cpp` | `Agent::remember` |
+| Tool 执行 | `src/agent.cpp` | `Agent::execute_tool`, `Agent::execute_tool_calls` |
+| Message / ToolCall 数据结构 | `include/libagent/types.hpp` | `Message`, `ToolCall`, `Role`, `GenerateOptions` |
+| Tool 注册表 | `include/libagent/tool.hpp` | `Tool`, `ToolHandler`, `ToolRegistry` |
+| Memory 抽象 | `include/libagent/memory.hpp` | `Memory`, `FullMemory`, `WindowMemory` |
+
+后文每个源码分析小节都以“**代码位置**”开头，便于直接跳转源码核对。
+
 理解目标是能够完整描述：
 
 ```text
@@ -70,6 +84,9 @@ STORE_RESULTS
 
 ## 3. AgentOptions：Agent 的依赖注入入口
 
+**代码位置：** `include/libagent/agent.hpp` → `struct AgentOptions`；`src/agent.cpp` → `Agent::Agent`
+
+
 `Agent` 自己不创建 Provider、Memory、Retriever 和 ToolRegistry。
 
 构造时：
@@ -110,6 +127,9 @@ std::shared_ptr<Retriever> retriever;
 ---
 
 ## 4. 外部入口：run()
+
+**代码位置：** `src/agent.cpp` → `Agent::run(std::string user_input)`；取消版本同文件中的 `Agent::run(..., cancellation_slot)`
+
 
 同步接口：
 
@@ -161,6 +181,9 @@ std::string answer
 ---
 
 ## 5. co_run()：真正的 ReAct 主循环
+
+**代码位置：** `src/agent.cpp` → `Agent::co_run`
+
 
 源码核心：
 
@@ -217,6 +240,9 @@ resp.message.tool_calls.empty()
 
 ## 6. remember()：统一的消息写入入口
 
+**代码位置：** `src/agent.cpp` → `Agent::remember`；消息结构定义见 `include/libagent/types.hpp` → `Message`
+
+
 ```cpp
 void Agent::remember(Message m) {
     if (opts_.hooks.on_message) {
@@ -265,6 +291,9 @@ Assistant:
 ---
 
 ## 7. step()：一轮 Agent 推理
+
+**代码位置：** `src/agent.cpp` → `Agent::step`
+
 
 ```cpp
 boost::asio::awaitable<ChatResponse>
@@ -326,6 +355,9 @@ co_run()
 ---
 
 ## 8. prepare_request()：每轮模型调用前做什么
+
+**代码位置：** `src/agent.cpp` → `Agent::prepare_request`；声明见 `include/libagent/agent.hpp`
+
 
 源码：
 
@@ -446,6 +478,9 @@ req.options.tools = opts_.tools->schemas();
 
 ## 9. build_messages()：最终给模型的消息
 
+**代码位置：** `src/agent.cpp` → `Agent::build_messages`、`Agent::latest_user_query`
+
+
 逻辑：
 
 ```text
@@ -489,6 +524,9 @@ Tool:
 ---
 
 ## 10. execute_tool()：单个工具如何运行
+
+**代码位置：** `src/agent.cpp` → `Agent::execute_tool`；工具接口见 `include/libagent/tool.hpp`
+
 
 核心：
 
@@ -553,6 +591,9 @@ Message
 ---
 
 ## 11. execute_tool_calls()：为什么不是简单 for 循环
+
+**代码位置：** `src/agent.cpp` → `Agent::execute_tool_calls`
+
 
 如果模型一次请求多个工具：
 
@@ -760,6 +801,9 @@ Final answer
 ---
 
 ## 14. max_tool_rounds 为什么存在
+
+**代码位置：** `include/libagent/agent.hpp` → `AgentOptions::max_tool_rounds`；使用位置见 `src/agent.cpp` → `Agent::co_run`
+
 
 ```cpp
 int max_tool_rounds = 10;
