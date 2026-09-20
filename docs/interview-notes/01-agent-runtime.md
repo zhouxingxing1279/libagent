@@ -96,6 +96,13 @@ Agent::Agent(AgentOptions opts)
     : opts_(std::move(opts)) {}
 ```
 
+这里采用“**按值接收 + move 到成员变量**”。项目层面的意义是：`Agent` 构造完成后需要持有整份 `AgentOptions`，因此参数最终会成为成员状态。
+
+相关 C++ 语言知识单独整理在：
+
+[值类别、右值引用与移动语义](../cpp-notes/01-value-categories-and-move-semantics.md)
+
+
 主要依赖：
 
 ```cpp
