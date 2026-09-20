@@ -34,7 +34,9 @@ std::string join_context(const std::vector<RetrievedChunk>& chunks) {
 
 }  // namespace
 
-// Agent takes ownership of its configuration. The parameter is passed by value so callers\n// may provide either an lvalue (copy) or rvalue (move), then we move it into opts_.\nAgent::Agent(AgentOptions opts) : opts_(std::move(opts)) {}
+// Agent 最终需要持有整份配置，因此这里按值接收参数：调用方传左值时先拷贝，传右值时可直接移动。
+// 随后通过 std::move 将局部参数中的资源转移到成员 opts_，避免一次不必要的深拷贝。
+Agent::Agent(AgentOptions opts) : opts_(std::move(opts)) {}
 
 void Agent::remember(Message m) {
     if (opts_.hooks.on_message) {
@@ -260,10 +262,21 @@ boost::asio::awaitable<void> Agent::co_run_stream(std::string user_input,
 }
 
 std::string Agent::run(std::string user_input) {
+    // run() 是面向普通同步调用者的适配层：内部仍复用异步核心 co_run()。
+    // 这里创建一个临时 io_context，作为本次 Agent 执行的事件循环与协程调度环境。
     boost::asio::io_context ioc;
+
+    // 将 co_run() 提交到 io_context 上执行，并使用 use_future 将协程最终结果桥接为 std::future。
+    // user_input 在此后不再使用，因此通过 std::move 转交给 co_run()。
     auto fut = boost::asio::co_spawn(ioc, co_run(std::move(user_input)),
                                      boost::asio::use_future);
+
+    // 当前线程在这里驱动整个 Asio 事件循环；LLM 请求、Tool 异步 IO 和协程恢复都依赖它向前推进。
+    // 因此 run() 对外表现为阻塞式同步接口，直到本次 Agent 执行结束才继续往下执行。
     ioc.run();
+
+    // 此时协程通常已经完成。get() 负责取出 co_run() 的最终字符串；
+    // 若协程内部以异常结束，这里也会将异常重新抛回同步调用栈。
     return fut.get();
 }
 
