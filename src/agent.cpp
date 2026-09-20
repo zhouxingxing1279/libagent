@@ -34,7 +34,7 @@ std::string join_context(const std::vector<RetrievedChunk>& chunks) {
 
 }  // namespace
 
-Agent::Agent(AgentOptions opts) : opts_(std::move(opts)) {}
+// Agent takes ownership of its configuration. The parameter is passed by value so callers\n// may provide either an lvalue (copy) or rvalue (move), then we move it into opts_.\nAgent::Agent(AgentOptions opts) : opts_(std::move(opts)) {}
 
 void Agent::remember(Message m) {
     if (opts_.hooks.on_message) {
