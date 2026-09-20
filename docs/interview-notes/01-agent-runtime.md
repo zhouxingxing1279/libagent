@@ -135,55 +135,95 @@ std::shared_ptr<Retriever> retriever;
 
 ## 4. 外部入口：run()
 
-**代码位置：** `src/agent.cpp` → `Agent::run(std::string user_input)`；取消版本同文件中的 `Agent::run(..., cancellation_slot)`
+**代码位置：** `src/agent.cpp` → `Agent::run(std::string user_input)`；声明见 `include/libagent/agent.hpp` → `Agent::run`
 
-
-同步接口：
+同步入口：
 
 ```cpp
 std::string Agent::run(std::string user_input) {
     boost::asio::io_context ioc;
-
-    auto fut = boost::asio::co_spawn(
-        ioc,
-        co_run(std::move(user_input)),
-        boost::asio::use_future
-    );
-
+    auto fut = boost::asio::co_spawn(ioc, co_run(std::move(user_input)),
+                                     boost::asio::use_future);
     ioc.run();
     return fut.get();
 }
 ```
 
-这里完成了三件事：
+### 4.1 run() 在 Agent Runtime 中承担什么职责
 
-1. 创建 `io_context`
-2. 将协程版本 `co_run()` 放到 executor 上执行
-3. 当前线程运行事件循环，并最终从 future 获取结果
+`run()` 本身并不实现 ReAct，也不直接调用 Provider 或 Tool。
 
-因此：
+它只有一个职责：
 
-> `run()` 是同步包装层，真正的 Agent 逻辑在 `co_run()`。
+> **把异步核心 `co_run()` 适配成普通同步 C++ 调用接口。**
 
-调用关系：
+因此项目层面的分层是：
 
 ```text
-caller
-  |
-  v
+普通同步调用者
+      |
+      v
 Agent::run()
-  |
-  +-- create io_context
-  |
-  +-- co_spawn(co_run())
-  |
-  +-- ioc.run()
-  |
-  +-- future.get()
-  |
-  v
-std::string answer
+      |
+      | 建立临时 Asio 执行环境
+      v
+Agent::co_run()
+      |
+      v
+真正的 Agent Runtime / ReAct Loop
 ```
+
+如果上层本身已经运行在 Asio coroutine 中，就不需要 `run()`，而应直接 `co_await agent.co_run(...)`。
+
+### 4.2 四行代码各自对应什么
+
+`boost::asio::io_context ioc;`：创建本次同步调用专用的事件循环 / executor。
+
+`co_spawn(...)`：把核心协程 `co_run()` 提交到 `ioc` 上运行，并要求最终结果以 `std::future` 的形式交回同步调用栈。
+
+`ioc.run();`：当前线程开始驱动 Asio event loop。Agent 内部的 HTTP、Tool coroutine、continuation 等异步工作都在这个执行环境中向前推进。
+
+`return fut.get();`：取出 `co_run()` 最终 `co_return` 的字符串；如果 coroutine 以异常结束，`get()` 也会把异常重新抛给同步调用者。
+
+### 4.3 为什么“内部异步”但“外部同步”
+
+libagent 内部可以使用 coroutine 和 async IO，但 `run()` 会在当前线程执行 `ioc.run()`，直到整个异步任务结束才返回。因此需要区分：
+
+```text
+实现模型：asynchronous
+调用语义：synchronous / blocking
+```
+
+调用者看到的仍然是普通同步代码：
+
+```cpp
+std::string answer = agent.run("hello");
+```
+
+### 4.4 为什么这个接口有价值
+
+它降低了普通调用者使用 Agent 的门槛。否则每个调用者都需要自己处理 `io_context / co_spawn / use_future / run / get`。
+
+因此 `run()` 属于 **blocking convenience wrapper**。
+
+### 4.5 什么时候不应该优先用 run()
+
+如果 libagent 被嵌入高并发服务器、已有 Boost.Asio event loop 的程序，或者需要同时运行大量 Agent session，更合理的是复用外部 executor，直接使用 `co_run()`，而不是每个请求都创建新的 `io_context`。
+
+所以两个接口的定位是：
+
+```text
+run()    -> 面向普通同步调用者
+co_run() -> 面向异步 / server runtime
+```
+
+详细的 C++ / Boost.Asio 语义见：
+
+[Boost.Asio：io_context、co_spawn、use_future 与同步包装](../cpp-notes/02-asio-run-and-coroutine-bridge.md)
+
+### 4.6 面试时怎么回答
+
+> `Agent::run()` 是一个同步适配层。它创建临时 `io_context`，通过 `co_spawn` 把核心异步接口 `co_run()` 调度到该 executor 上，再使用 `use_future` 把 coroutine 的最终结果桥接为 `std::future`。随后当前线程调用 `ioc.run()` 驱动整个事件循环，完成后通过 `future.get()` 返回最终字符串或传播异常。因此 libagent 的核心实现可以保持 coroutine 异步模型，同时给普通同步 C++ 程序提供简单的 blocking API。
 
 ---
 
