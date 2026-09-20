@@ -35,7 +35,253 @@ std::string Agent::run(std::string user_input) {
 
 ---
 
-## 2. io_context 是什么
+## 2. 异步编程基础：先分清几个概念
+
+在理解 Boost.Asio 之前，先区分下面几个概念。
+
+### 2.1 同步
+
+同步表示：当前操作没完成，调用流程不会继续往下走。
+
+例如：
+
+```cpp
+auto result = request_llm();
+process(result);
+```
+
+如果 `request_llm()` 需要 5 秒，那么当前线程通常会一直等到它返回。
+
+```text
+发请求
+  ↓
+等待 5 秒
+  ↓
+收到结果
+  ↓
+继续执行
+```
+
+### 2.2 阻塞
+
+阻塞描述的是**线程状态**。
+
+如果线程调用一个阻塞操作，那么在结果回来之前，这个线程不能继续执行其他代码。
+
+所以要注意：
+
+> 同步/异步描述的是调用关系；阻塞/非阻塞描述的是线程是否被占住。
+
+两组概念相关，但不是完全等价。
+
+### 2.3 异步
+
+异步的核心思想是：
+
+> 某个任务在等待 IO 时，先把控制权还给调度器，让线程去推进其他可执行任务。
+
+例如 Agent 同时等待：
+
+```text
+LLM 网络请求
+天气 API
+地图 API
+数据库
+```
+
+如果每个等待都阻塞线程，会浪费大量时间。
+
+异步模型允许：
+
+```text
+任务 A 发请求
+  ↓
+等待 IO，先挂起 A
+
+任务 B 开始执行
+  ↓
+等待 IO，先挂起 B
+
+任务 C 继续执行
+
+A 的网络结果回来
+  ↓
+恢复 A
+```
+
+### 2.4 并发与并行
+
+**并发（concurrency）**表示多个任务在同一个时间区间内都能持续推进。
+
+```text
+A 做一点
+B 做一点
+A 等 IO
+B 继续
+```
+
+**并行（parallelism）**表示多个任务在同一时刻真的同时执行。
+
+```text
+CPU 核 1：执行 A
+CPU 核 2：执行 B
+```
+
+因此：
+
+> 单线程程序也可以通过事件循环和协程实现并发，但不能实现真正的 CPU 并行执行。
+
+### 2.5 为什么 Agent 特别适合异步
+
+Agent 大量操作都是 IO-bound：
+
+- 请求 LLM
+- 调用 Tool HTTP API
+- 数据库查询
+- 文件 IO
+- timer
+- RPC
+
+这些操作的大部分时间不是 CPU 在计算，而是在等待外部系统。
+
+所以 Agent Runtime 很适合使用：
+
+```text
+event loop + coroutine + async IO
+```
+
+而不是每个任务都新建一个线程去阻塞等待。
+
+---
+
+## 3. Coroutine：可以暂停和恢复的函数
+
+普通函数通常是：
+
+```text
+进入函数
+  ↓
+一直执行
+  ↓
+return
+```
+
+Coroutine 则可以：
+
+```text
+开始执行
+  ↓
+运行一段
+  ↓
+co_await
+  ↓
+保存状态并暂停
+  ↓
+稍后恢复
+  ↓
+继续执行
+```
+
+保存的状态通常包括：
+
+- 当前执行位置
+- 局部变量
+- 参数
+- coroutine frame 中的其他状态
+
+因此可以把 coroutine 简单理解为：
+
+> **可以被暂停、以后再从原位置继续执行的函数。**
+
+### 3.1 co_await 的关键区别
+
+普通阻塞等待：
+
+```cpp
+auto result = slow_function();
+```
+
+如果耗时 5 秒：
+
+```text
+线程被占住 5 秒
+```
+
+异步 coroutine：
+
+```cpp
+auto result = co_await async_function();
+```
+
+如果结果尚未准备好：
+
+```text
+当前 coroutine 暂停
+  ↓
+线程回到 event loop
+  ↓
+执行其他 ready task
+  ↓
+结果准备好
+  ↓
+coroutine 恢复
+```
+
+必须记住：
+
+> **co_await 挂起的是 coroutine，不等于阻塞整个线程。**
+
+### 3.2 为什么 coroutine 比 callback 容易读
+
+传统 callback 异步代码可能写成：
+
+```cpp
+request_llm([](auto llm) {
+    request_weather([llm](auto weather) {
+        query_database([llm, weather](auto data) {
+            // ...
+        });
+    });
+});
+```
+
+容易形成 callback hell。
+
+Coroutine 可以写成：
+
+```cpp
+auto llm = co_await request_llm();
+auto weather = co_await request_weather();
+auto data = co_await query_database();
+```
+
+逻辑看起来仍像同步代码，但底层可以异步挂起。
+
+---
+
+## 4. Event Loop：谁负责调度这些 coroutine
+
+有了可以暂停的 coroutine，还需要一个调度中心。
+
+Event Loop 可以粗略理解为：
+
+```cpp
+while (还有任务) {
+    找一个现在可以继续执行的任务;
+    执行它;
+}
+```
+
+它需要管理：
+
+- ready task
+- 网络 IO 完成事件
+- timer
+- coroutine continuation
+
+在 Boost.Asio 中，`io_context` 就承担了这个角色。
+
+## 5. io_context 是什么
 
 `boost::asio::io_context` 可以理解为 Asio 的事件循环和任务调度中心。
 
@@ -76,7 +322,7 @@ ioc.run();
 
 ---
 
-## 3. co_spawn 是什么
+## 6. co_spawn 是什么
 
 `co_spawn` 用来把一个 Asio coroutine 放到某个 executor 上运行。
 
@@ -117,7 +363,7 @@ co_spawn
 
 ---
 
-## 4. awaitable<T> 是什么
+## 7. awaitable<T> 是什么
 
 libagent 的：
 
@@ -156,7 +402,7 @@ co_spawn(...)
 
 ---
 
-## 5. use_future 做了什么
+## 8. use_future 做了什么
 
 `boost::asio::use_future` 是一个 CompletionToken。
 
@@ -197,7 +443,7 @@ std::future<std::string>
 
 ---
 
-## 6. 为什么必须 ioc.run()
+## 9. 为什么必须 ioc.run()
 
 这一句：
 
@@ -233,7 +479,7 @@ ioc.run()
 
 ---
 
-## 7. ioc.run() 是不是阻塞函数
+## 10. ioc.run() 是不是阻塞函数
 
 是。
 
@@ -278,7 +524,7 @@ ioc.run()
 
 ---
 
-## 8. future.get() 在这里为什么通常不会再次长时间阻塞
+## 11. future.get() 在这里为什么通常不会再次长时间阻塞
 
 代码：
 
@@ -329,7 +575,7 @@ future.get()
 
 ---
 
-## 9. 为什么不直接 fut.get()
+## 12. 为什么不直接 fut.get()
 
 例如这样：
 
@@ -376,7 +622,7 @@ ioc.run();
 
 ---
 
-## 10. 为什么 run() 仍然有价值
+## 13. 为什么 run() 仍然有价值
 
 既然项目已经有：
 
@@ -426,7 +672,7 @@ get
 
 ---
 
-## 11. run() 与 co_run() 的接口分层
+## 14. run() 与 co_run() 的接口分层
 
 ```text
                Agent
@@ -459,7 +705,7 @@ get
 
 ---
 
-## 12. 这种设计的局限
+## 15. 这种设计的局限
 
 当前：
 
@@ -502,7 +748,7 @@ destroy
 
 ---
 
-## 13. 和线程是什么关系
+## 16. 和线程是什么关系
 
 默认这段：
 
@@ -547,7 +793,7 @@ Coroutine C -------- runnable  |   |
 
 ---
 
-## 14. 面试高频问题
+## 17. 面试高频问题
 
 ### Q1：run() 明明内部是异步，为什么它还是同步接口？
 
@@ -571,7 +817,7 @@ Coroutine C -------- runnable  |   |
 
 ---
 
-## 15. 一句话总结
+## 18. 一句话总结
 
 ```cpp
 Agent::run()
@@ -580,3 +826,128 @@ Agent::run()
 本质上是：
 
 > **创建一个临时 Asio event loop，把核心 coroutine `co_run()` 放进去运行，再通过 `std::future` 把 coroutine 的返回值和异常桥接回普通同步 C++ 调用栈。**
+
+
+---
+
+## 19. 完整执行时序
+
+以：
+
+```cpp
+agent.run("帮我查天气");
+```
+
+为例：
+
+```text
+主线程
+  |
+  v
+Agent::run
+  |
+  | 创建 io_context
+  |
+  | co_spawn(co_run)
+  |
+  v
+ioc.run()
+  |
+  v
+co_run 开始
+  |
+  v
+step()
+  |
+  v
+provider->chat()
+  |
+  | 发 HTTP 请求
+  |
+  v
+co_await
+  |
+  | coroutine 暂停
+  | event loop 可以推进其他任务
+  |
+  v
+HTTP 返回
+  |
+  v
+coroutine 恢复
+  |
+  v
+模型要求调用 Tool
+  |
+  v
+Tool coroutine
+  |
+  | 再次等待 IO
+  |
+  v
+Tool 完成
+  |
+  v
+下一轮 LLM
+  |
+  v
+最终答案
+  |
+  v
+co_return string
+  |
+  v
+future ready
+  |
+  v
+ioc.run() 返回
+  |
+  v
+future.get()
+  |
+  v
+Agent::run 返回 std::string
+```
+
+---
+
+## 20. 当前阶段需要掌握的最小知识集
+
+| 概念 | 当前阶段先这样理解 |
+| --- | --- |
+| 同步 | 当前操作没结束，调用流程继续等 |
+| 异步 | 当前任务等待时，可以先推进其他任务 |
+| 阻塞 | 线程被当前操作占住 |
+| 并发 | 多个任务在同一时间区间内交替推进 |
+| 并行 | 多个任务同一时刻真正同时执行 |
+| coroutine | 可以暂停、恢复的函数 |
+| `co_await` | 挂起当前 coroutine，等待异步结果 |
+| `io_context` | Event Loop / 调度中心 |
+| executor | 决定任务在哪里、按什么规则执行 |
+| `co_spawn` | 把 coroutine 提交到执行环境 |
+| `ioc.run()` | 当前线程开始驱动 event loop |
+| `use_future` | 把异步结果桥接为 `std::future` |
+
+学习顺序建议：
+
+```text
+同步/阻塞
+  ↓
+异步
+  ↓
+并发/并行
+  ↓
+coroutine
+  ↓
+co_await
+  ↓
+event loop
+  ↓
+io_context
+  ↓
+executor
+  ↓
+co_spawn
+  ↓
+use_future
+```
