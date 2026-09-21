@@ -10,6 +10,7 @@
 
 1. [值类别、右值引用与移动语义](01-value-categories-and-move-semantics.md)
 2. [Boost.Asio：io_context、co_spawn、use_future 与同步包装](02-asio-run-and-coroutine-bridge.md)
+3. [强类型枚举 enum class](03-enum-class.md)
 
 后续预计补充：
 
