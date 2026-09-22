@@ -10,13 +10,19 @@
    - 重点：`run → co_run → step → prepare_request → provider → tool → memory → next round`
 
 2. **核心数据模型**
+   - 笔记：[02-types-and-message-model.md](./02-types-and-message-model.md)
    - `include/libagent/types.hpp`
-   - 重点：`Message`、`ToolCall`、`ChatRequest`、`ChatResponse`、`FinishReason`
+   - `src/types.cpp`
+   - `include/libagent/provider.hpp`
+   - 重点：canonical data model、`Message`、`ToolCall`、`ToolDefinition`、`ChatRequest`、`ChatResponse`、Provider 协议适配
 
 3. **Tool Calling**
+   - 笔记：[03-tool-calling.md](./03-tool-calling.md)
    - `include/libagent/tool.hpp`
    - `src/tool.cpp`
-   - 重点：Tool Registry、JSON Schema、异步 ToolHandler、tool result 回灌上下文
+   - `src/agent.cpp`
+   - `examples/02_tool_agent.cpp`
+   - 重点：`spec + handler`、Tool Registry、JSON Schema、LLM 工具选择、name -> handler 分发、Tool Result 回灌、并行 ToolCall
 
 4. **C++20 Coroutine / Boost.Asio 异步模型**
    - `boost::asio::awaitable<T>`
@@ -137,4 +143,10 @@ docs/interview-notes/
 └── 10-interview-questions.md
 ```
 
-当前第一优先级：**精读 `src/agent.cpp`。**
+当前进度：
+
+- 第一部分 Agent Runtime / ReAct Loop：已完成
+- 第二部分核心数据模型：已完成
+- 第三部分 Tool Calling：已完成基础链路
+
+下一优先级：**继续深挖 ToolHandler 的 C++ 抽象与多 Tool 并发，再进入 C++20 Coroutine / Boost.Asio。**
